@@ -1,0 +1,4 @@
+[submodule "dependencies/libressl"]
+	path = dependencies/libressl
+	url = https://github.com/libressl-portable/portable.git
+	ignore = dirty
