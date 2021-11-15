@@ -18,7 +18,12 @@ public:
 	std::optional<Certificate> getCertificate(NodeID nodeID) const;
 	void setCertificate(NodeID nodeID, Certificate certificate);
 
+	CertificateManager(CertificateManager&& other) = default;
 	~CertificateManager() = default;
+
+	static std::shared_ptr<CertificateManager>
+	createInstance(const std::filesystem::path certificatesFolder);
+	static std::shared_ptr<CertificateManager> getInstance();
 
 protected:
 	CertificateManager(const std::filesystem::path certificatesFolder);
@@ -27,4 +32,6 @@ protected:
 
 	const std::filesystem::path certificatesFolder;
 	mutable std::map<NodeID, Certificate> certificatesMap;
+
+	static std::shared_ptr<CertificateManager> instance;
 };

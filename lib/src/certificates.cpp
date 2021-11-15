@@ -4,6 +4,8 @@
 #include <fstream>
 #include <vector>
 
+std::shared_ptr<CertificateManager> CertificateManager::instance = nullptr;
+
 CertificateManager::CertificateManager(const std::filesystem::path certificatesFolder)
     : certificatesFolder{ std::move(certificatesFolder) } {}
 
@@ -62,3 +64,17 @@ void CertificateManager::setCertificate(const NodeID nodeID, const Certificate c
 
 	certificatesMap.try_emplace(nodeID, certificate);
 }
+
+std::shared_ptr<CertificateManager>
+CertificateManager::createInstance(const std::filesystem::path certificatesFolder) {
+	CertificateManager::instance =
+	    std::make_shared<CertificateManager>(CertificateManager{ certificatesFolder });
+
+	return CertificateManager::instance;
+}
+
+std::shared_ptr<CertificateManager> CertificateManager::getInstance() {
+	// Invalid semantics to request a certificate manager if no instance has yet been created
+	assert(CertificateManager::instance);
+	return CertificateManager::instance;
+};
