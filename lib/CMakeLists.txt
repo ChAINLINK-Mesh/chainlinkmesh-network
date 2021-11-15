@@ -27,6 +27,11 @@ add_library(lib-wgmesh SHARED STATIC ${SOURCE_FILES})
 target_include_directories(lib-wgmesh PRIVATE ${CMAKE_INSTALL_PREFIX}/include)
 target_compile_options(lib-wgmesh PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
+# TODO: Replace with proper check for available UBSAN lib.
+if (NOT ${CMAKE_CROSSCOMPILING})
+	target_compile_options(lib-wgmesh PRIVATE -fsanitize=undefined)
+endif()
+
 install(TARGETS lib-wgmesh
 	LIBRARY DESTINATION ${LIB_WGMESH_INSTALL_LIB_DIR}
 	PUBLIC_HEADER DESTINATION ${LIB_WGMESH_INSTALL_LIB_DIR}
