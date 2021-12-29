@@ -9,7 +9,7 @@
 using NodeID = std::uint64_t;
 using BN_RAII = std::unique_ptr<BIGNUM, decltype(&::BN_free)>;
 using EVP_PKEY_RAII = std::unique_ptr<EVP_PKEY, decltype(&::EVP_PKEY_free)>;
-using RSA_RAII = std::unique_ptr<RSA, decltype(&::RSA_free)>;
+using EVP_PKEY_CTX_RAII = std::unique_ptr<EVP_PKEY_CTX, decltype(&::EVP_PKEY_CTX_free)>;
 using X509_RAII = std::shared_ptr<X509>;
 using X509_REQ_RAII = std::unique_ptr<X509_REQ, decltype(&::X509_REQ_free)>;
 using X509_NAME_RAII = std::unique_ptr<X509_NAME, decltype(&::X509_NAME_free)>;

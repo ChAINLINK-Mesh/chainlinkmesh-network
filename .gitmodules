@@ -1,4 +1,7 @@
-[submodule "dependencies/libressl"]
-	path = dependencies/libressl
-	url = https://github.com/libressl-portable/portable.git
+[submodule "dependencies/poco"]
+	path = dependencies/poco
+	url = https://github.com/pocoproject/poco.git
+[submodule "dependencies/openssl"]
+	path = dependencies/openssl
+	url = https://github.com/openssl/openssl.git
 	ignore = dirty

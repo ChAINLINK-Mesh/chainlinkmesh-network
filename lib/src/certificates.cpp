@@ -2,6 +2,7 @@
 #include "scope-exit.hpp"
 #include <cassert>
 #include <fstream>
+#include <openssl/evp.h>
 #include <vector>
 
 std::shared_ptr<CertificateManager> CertificateManager::instance = nullptr;
@@ -70,33 +71,42 @@ void CertificateManager::setCertificate(const NodeID nodeID, const Certificate c
 
 [[nodiscard]] std::optional<X509_REQ_RAII>
 CertificateManager::generateCertificateRequest(const CertificateInfo& certificateInfo) {
-	const BN_RAII bn{ BN_new(), ::BN_free };
-	const RSA_RAII rsaKey{ RSA_new(), ::RSA_free };
-
-	// If we failed to initialise the RSA key representation.
-	if (!bn || !rsaKey) {
+	const EVP_PKEY_CTX_RAII rsaCtxParameters{ EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, nullptr),
+		                                        ::EVP_PKEY_CTX_free };
+	// If we failed to initialise the RSA key generator's context.
+	if (!rsaCtxParameters) {
 		return std::nullopt;
 	}
 
-	// Generate RSA key
-	if (BN_set_word(bn.get(), RSA_F4) != 1) {
+	// Generate RSA key generator
+	if (EVP_PKEY_CTX_set_rsa_keygen_bits(rsaCtxParameters.get(),
+	                                     certificateInfo.certificateKeyLength) <= 0) {
 		return std::nullopt;
 	}
 
-	if (RSA_generate_key_ex(rsaKey.get(), certificateInfo.certificateKeyLength, bn.get(), nullptr) !=
-	    1) {
+	EVP_PKEY* tempKeygenParams = nullptr;
+	if (EVP_PKEY_paramgen(rsaCtxParameters.get(), &tempKeygenParams) != 1) {
+		return std::nullopt;
+	}
+	const EVP_PKEY_RAII rsaKeygenParams{ tempKeygenParams, ::EVP_PKEY_free };
+
+	const EVP_PKEY_CTX_RAII rsaCtx{ EVP_PKEY_CTX_new(rsaKeygenParams.get(), nullptr),
+		                              ::EVP_PKEY_CTX_free };
+
+	// If we failed to generate a valid RSA context.
+	if (!rsaCtx) {
 		return std::nullopt;
 	}
 
-	// Generate algorithm-independent private key representation.
-	EVP_PKEY_RAII evpKey{ EVP_PKEY_new(), EVP_PKEY_free };
-
-	if (!evpKey) {
+	if (EVP_PKEY_keygen_init(rsaCtx.get()) != 1) {
 		return std::nullopt;
 	}
 
-	// Copy RSA key without taking ownership.
-	EVP_PKEY_set1_RSA(evpKey.get(), rsaKey.get());
+	EVP_PKEY* tempRSAKey = nullptr;
+	if (EVP_PKEY_keygen(rsaCtx.get(), &tempRSAKey) != 1) {
+		return std::nullopt;
+	}
+	const EVP_PKEY_RAII rsaKey{ tempRSAKey, ::EVP_PKEY_free };
 
 	// Generate X509 representation
 	const X509_RAII x509{ X509_new(), ::X509_free };
@@ -166,12 +176,12 @@ CertificateManager::generateCertificateRequest(const CertificateInfo& certificat
 	}
 
 	// Set public key of X509 request
-	if (X509_REQ_set_pubkey(x509Req.get(), evpKey.get()) != 1) {
+	if (X509_REQ_set_pubkey(x509Req.get(), rsaKey.get()) != 1) {
 		return std::nullopt;
 	}
 
 	// Set the sign key of X509 request
-	if (X509_REQ_sign(x509Req.get(), evpKey.get(), EVP_sha1()) != 1) {
+	if (X509_REQ_sign(x509Req.get(), rsaKey.get(), EVP_sha1()) != 1) {
 		return std::nullopt;
 	}
 
