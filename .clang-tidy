@@ -2,7 +2,7 @@
 WarningsAsErrors: ''
 HeaderFilterRegex: 'src/.*'
 AnalyzeTemporaryDtors: false
-FormatStyle:     file
+FormatStyle: file
 Checks: '-*,readability-*,modernize-*,-modernize-use-trailing-return-type,performance-*,cpp-core-guidelines,bugprone-*,llvm-include-order,llvm-namespace-comment'
 CheckOptions:
   - { key: readability-identifier-naming.ClassCase,          value: CamelCase  }

@@ -54,21 +54,14 @@ ConnectionHandler::decode_packet(BufferType& buffer) {
 	}
 
 	{
-		char digest[SHA256_DIGEST_B64_SIZE];
-		const auto read = buffer.read(digest, SHA256_DIGEST_B64_SIZE);
+		char digest[SHA256_DIGEST_SIZE] = { 0 };
+		const auto read = buffer.read(digest, SHA256_DIGEST_SIZE);
 
-		if (read != SHA256_DIGEST_B64_SIZE) {
+		if (read != SHA256_DIGEST_SIZE) {
 			return std::nullopt;
 		}
 
-		if (const auto decodedDigest = base64_decode({ digest, SHA256_DIGEST_B64_SIZE });
-		    decodedDigest &&
-		    decodedDigest.value().size() == SHA256_SIGNATURE_SIZE) {
-			std::copy_n(decodedDigest.value().begin(), SHA256_SIGNATURE_SIZE,
-			            packet.timestampPSKHash.begin());
-		} else {
-			return std::nullopt;
-		}
+		std::copy_n(digest, SHA256_DIGEST_SIZE, packet.timestampPSKHash.begin());
 	}
 
 	{
@@ -85,23 +78,19 @@ ConnectionHandler::decode_packet(BufferType& buffer) {
 	}
 
 	{
-		char signature[SHA256_SIGNATURE_B64_SIZE];
-		const auto read = buffer.read(signature, SHA256_SIGNATURE_B64_SIZE);
+		char signature[SHA256_SIGNATURE_SIZE] = { 0 };
+		const auto read = buffer.read(signature, SHA256_SIGNATURE_SIZE);
 
-		if (read != SHA256_SIGNATURE_B64_SIZE) {
+		if (read != SHA256_SIGNATURE_SIZE) {
 			return std::nullopt;
 		}
 
-		if (const auto decodedSignature =
-		        base64_decode({ signature, SHA256_SIGNATURE_B64_SIZE });
-		    decodedSignature &&
-		    decodedSignature.value().size() == SHA256_SIGNATURE_SIZE) {
-			std::copy_n(decodedSignature.value().begin(), SHA256_SIGNATURE_SIZE,
-			            packet.timestampPSKSignature.begin());
-		} else {
-			return std::nullopt;
-		}
+		std::copy_n(signature, SHA256_SIGNATURE_SIZE,
+		            packet.timestampPSKSignature.begin());
 	}
+
+	packet.csr.resize(buffer.used());
+	buffer.read(packet.csr.data(), packet.csr.size());
 
 	return packet;
 }
@@ -137,5 +126,6 @@ ConnectionHandler::base64_decode(std::span<char> bytes) {
 std::optional<InitialisationPacket>
 ConnectionHandler::decode_packet(const std::span<const char> buffer) {
 	BufferType fifoBuffer{ buffer.data(), buffer.size() };
+	fifoBuffer.setEOF(true);
 	return decode_packet(fifoBuffer);
 }

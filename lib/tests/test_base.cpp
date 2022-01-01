@@ -11,8 +11,15 @@ int main(int argc, char* argv[]) {
 	try {
 		test();
 		std::clog << "Success";
+	} catch (const char* error) {
+		std::clog << "Failure: " << error << "\n";
+		throw;
+	} catch (const std::string& error) {
+		std::clog << "Failure: " << error << "\n";
+		throw;
 	} catch (...) {
 		std::clog << "Failure";
+		throw;
 	}
 
 	std::clog << "\n";

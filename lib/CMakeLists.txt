@@ -8,38 +8,38 @@ include(ExternalProject)
 set(CMAKE_INSTALL_PREFIX ${CMAKE_CURRENT_BINARY_DIR})
 set(SRC_DIRECTORY src)
 set(HEADER_FILES
-	certificates.hpp
-	public-protocol.hpp
-	scope-exit.hpp
-)
+        certificates.hpp
+        public-protocol.hpp
+        scope-exit.hpp
+        )
 set(SOURCE_FILES
-	certificates.cpp
-	public-protocol.cpp
-)
+        certificates.cpp
+        public-protocol.cpp
+        )
 
 list(TRANSFORM HEADER_FILES PREPEND "${SRC_DIRECTORY}/")
 list(TRANSFORM SOURCE_FILES PREPEND "${SRC_DIRECTORY}/")
 
 set(BASE_COMPILE_ARGS
-	-Wall
-	-Wextra
-	-Wpedantic
-	-Werror
-)
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Werror
+        )
 
 find_program(MAKE_EXECUTABLE
-	NAMES gmake mingw32-make make
-	NAMES_PER_DIR
-	DOC "GNU Make"
-)
+        NAMES gmake mingw32-make make
+        NAMES_PER_DIR
+        DOC "GNU Make"
+        )
 
 SET(OPENSSL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../dependencies/openssl)
 ExternalProject_Add(OpenSSL SOURCE_DIR ${OPENSSL_DIR}
-	PATCH_COMMAND ""
-	CONFIGURE_COMMAND cd ${OPENSSL_DIR} && ./Configure --prefix=${CMAKE_INSTALL_PREFIX} --libdir=lib
-	BUILD_COMMAND ${MAKE_EXECUTABLE} -j${Ncpu} -C ${OPENSSL_DIR} ${_targ}
-	INSTALL_COMMAND ${MAKE_EXECUTABLE} -j${Ncpu} -C ${OPENSSL_DIR} install
-)
+        PATCH_COMMAND ""
+        CONFIGURE_COMMAND cd ${OPENSSL_DIR} && ./Configure --prefix=${CMAKE_INSTALL_PREFIX} --libdir=lib
+        BUILD_COMMAND ${MAKE_EXECUTABLE} -j${Ncpu} -C ${OPENSSL_DIR} ${_targ}
+        INSTALL_COMMAND ${MAKE_EXECUTABLE} -j${Ncpu} -C ${OPENSSL_DIR} install
+        )
 set(BUILD_SHARED_LIBS NO)
 set(ENABLE_ACTIVERECORD OFF)
 set(ENABLE_ACTIVERECORD_COMPILER OFF)
@@ -70,36 +70,36 @@ target_link_libraries(${PROJECT_NAME} PUBLIC Poco::Net crypto pthread)
 
 # TODO: Replace with proper check for available UBSAN lib.
 if (NOT ${CMAKE_CROSSCOMPILING})
-	target_compile_options(${PROJECT_NAME} PUBLIC -fsanitize=undefined)
-	target_link_options(${PROJECT_NAME} PUBLIC -fsanitize=undefined)
-endif()
+    target_compile_options(${PROJECT_NAME} PUBLIC -fsanitize=undefined)
+    target_link_options(${PROJECT_NAME} PUBLIC -fsanitize=undefined)
+endif ()
 
 install(TARGETS ${PROJECT_NAME}
-	LIBRARY DESTINATION ${LIB_WGMESH_INSTALL_LIB_DIR}
-	PUBLIC_HEADER DESTINATION ${LIB_WGMESH_INSTALL_LIB_DIR}
-)
+        LIBRARY DESTINATION ${LIB_WGMESH_INSTALL_LIB_DIR}
+        PUBLIC_HEADER DESTINATION ${LIB_WGMESH_INSTALL_LIB_DIR}
+        )
 
 # Tests
 
 MACRO(SUBDIRLIST result curdir)
-	FILE(GLOB children RELATIVE ${curdir} ${curdir}/*)
-	SET(dirlist "")
-	FOREACH(child ${children})
-		IF(IS_DIRECTORY ${curdir}/${child})
-			LIST(APPEND dirlist ${child})
-		ENDIF()
-	ENDFOREACH()
-	SET(${result} ${dirlist})
+    FILE(GLOB children RELATIVE ${curdir} ${curdir}/*)
+    SET(dirlist "")
+    FOREACH (child ${children})
+        IF (IS_DIRECTORY ${curdir}/${child})
+            LIST(APPEND dirlist ${child})
+        ENDIF ()
+    ENDFOREACH ()
+    SET(${result} ${dirlist})
 ENDMACRO()
 
 SUBDIRLIST(SUBDIRS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
 
-FOREACH(subdir ${SUBDIRS})
-	add_executable(${subdir} tests/test_base.cpp tests/${subdir}/test.cpp)
-	target_compile_options(${subdir} PRIVATE ${BASE_COMPILE_ARGS})
-	target_link_libraries(${subdir} ${PROJECT_NAME})
-	add_test(NAME ${subdir}
-		COMMAND ${subdir}
-		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}
-	)
-ENDFOREACH()
+FOREACH (subdir ${SUBDIRS})
+    add_executable(${subdir} tests/test_base.cpp tests/${subdir}/test.cpp)
+    target_compile_options(${subdir} PRIVATE ${BASE_COMPILE_ARGS})
+    target_link_libraries(${subdir} ${PROJECT_NAME})
+    add_test(NAME ${subdir}
+            COMMAND ${subdir}
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}
+            )
+ENDFOREACH ()

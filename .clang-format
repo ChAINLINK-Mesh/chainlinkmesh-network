@@ -2,18 +2,18 @@
 BasedOnStyle: llvm
 IndentWidth: 2
 ---
+Language: Cpp
 AccessModifierOffset: -2
 AllowShortFunctionsOnASingleLine: Empty
 AlwaysBreakTemplateDeclarations: Yes
 BreakBeforeBraces: Attach
 BreakConstructorInitializers: BeforeColon
-Cpp11BracedListStyle: false
 ColumnLimit: 80
+Cpp11BracedListStyle: false
 DerivePointerAlignment: false
 FixNamespaceComments: true
 IndentCaseLabels: true
 IndentPPDirectives: AfterHash
-Language: Cpp
 NamespaceIndentation: All
 PointerAlignment: Left
 SortIncludes: CaseSensitive

@@ -45,7 +45,6 @@ public:
 
 protected:
 	Poco::Net::TCPServer server;
-
 };
 
 class ConnectionHandler : public Poco::Net::TCPServerConnection {
@@ -54,7 +53,8 @@ public:
 	~ConnectionHandler() override = default;
 	void run() override;
 
-	static std::optional<InitialisationPacket> decode_packet(std::span<const char> buffer);
+	static std::optional<InitialisationPacket>
+	decode_packet(std::span<const char> buffer);
 
 protected:
 	using BufferType = Poco::FIFOBuffer;
@@ -64,14 +64,14 @@ protected:
 	base64_decode(std::span<char> bytes);
 
 	static const constexpr std::uint16_t SHA256_DIGEST_B64_SIZE =
-			base64_encoded_character_count(SHA256_DIGEST_SIZE);
+	    base64_encoded_character_count(SHA256_DIGEST_SIZE);
 	static const constexpr std::uint16_t SHA256_SIGNATURE_B64_SIZE =
-			base64_encoded_character_count(SHA256_SIGNATURE_SIZE);
+	    base64_encoded_character_count(SHA256_SIGNATURE_SIZE);
 	static const constexpr std::uint16_t MIN_PACKET_BUFFER_SIZE =
-			sizeof(InitialisationPacket::timestamp) + SHA256_DIGEST_B64_SIZE +
-			sizeof(InitialisationPacket::referringNode) + SHA256_SIGNATURE_B64_SIZE;
+	    sizeof(InitialisationPacket::timestamp) + SHA256_DIGEST_B64_SIZE +
+	    sizeof(InitialisationPacket::referringNode) + SHA256_SIGNATURE_B64_SIZE;
 	static const constexpr std::uint16_t MAX_CSR_SIZE = 1200;
 	// Size: MIN_PACKET_BUFFER_SIZE + sizeof(csr) ~= 1675 bytes.
 	static const constexpr std::uint16_t INIT_PACKET_BUFFER_SIZE =
-			MIN_PACKET_BUFFER_SIZE + MAX_CSR_SIZE;
+	    MIN_PACKET_BUFFER_SIZE + MAX_CSR_SIZE;
 };
