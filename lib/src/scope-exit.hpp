@@ -8,8 +8,8 @@ concept VoidReturn = std::is_void_v<std::invoke_result_t<Callable>>;
 class ScopeExit {
 public:
 	template <class Callback>
-	explicit ScopeExit(const Callback& f) requires std::is_void_v<std::invoke_result_t<Callback>>
-	    : f{ std::move(f) } {}
+	explicit ScopeExit(const Callback& function) requires VoidReturn<Callback>
+	    : f{ std::move(function) } {}
 
 	~ScopeExit() {
 		f();

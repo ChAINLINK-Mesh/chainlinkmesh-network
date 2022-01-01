@@ -7,39 +7,45 @@
 
 std::shared_ptr<CertificateManager> CertificateManager::instance = nullptr;
 
-CertificateManager::CertificateManager(const std::filesystem::path certificatesFolder)
-    : certificatesFolder{ std::move(certificatesFolder) } {}
+CertificateManager::CertificateManager(
+    const std::filesystem::path certificatesFolder)
+    : certificatesFolder{ certificatesFolder } {}
 
-std::filesystem::path CertificateManager::getCertificatePath(const NodeID nodeID) const {
+std::filesystem::path
+CertificateManager::get_certificate_path(NodeID nodeID) const {
 	return certificatesFolder / (std::to_string(nodeID) + ".cert");
 }
 
 [[nodiscard]] std::optional<Certificate>
-CertificateManager::getCertificate(const NodeID nodeID) const {
-	// If we haven't yet created the certificates folder, we don't have the node's certificate.
+CertificateManager::get_certificate(const NodeID nodeID) const {
+	// If we haven't yet created the certificates folder, we don't have the node's
+	// certificate.
 	if (!std::filesystem::exists(certificatesFolder)) {
 		return std::nullopt;
 	}
 
-	if (const auto certificate = certificatesMap.find(nodeID); certificate != certificatesMap.end()) {
+	if (const auto certificate = certificatesMap.find(nodeID);
+	    certificate != certificatesMap.end()) {
 		return certificate->second;
 	}
 
-	const auto nodeCertificatePath = getCertificatePath(nodeID);
+	const auto nodeCertificatePath = get_certificate_path(nodeID);
 
 	// If we don't have the node's certificate file, return empty.
 	if (!std::filesystem::exists(nodeCertificatePath)) {
 		return std::nullopt;
 	}
 
-	std::ifstream nodeCertificate{ nodeCertificatePath, std::ios::in | std::ios::binary };
+	std::ifstream nodeCertificate{ nodeCertificatePath,
+		                             std::ios::in | std::ios::binary };
 
 	if (!nodeCertificate) {
 		return std::nullopt;
 	}
 
 	std::vector<unsigned char> nodeCertificateBytes{
-		std::istreambuf_iterator<char>{ nodeCertificate }, std::istreambuf_iterator<char>{}
+		std::istreambuf_iterator<char>{ nodeCertificate },
+		std::istreambuf_iterator<char>{}
 	};
 	nodeCertificate.close();
 
@@ -53,34 +59,39 @@ CertificateManager::getCertificate(const NodeID nodeID) const {
 	return certificate;
 }
 
-void CertificateManager::setCertificate(const NodeID nodeID, const Certificate certificate) {
+void CertificateManager::set_certificate(NodeID nodeID,
+                                         const Certificate& certificate) {
 	// Create certificate folder if it doesn't exist
 	if (!std::filesystem::exists(certificatesFolder)) {
 		std::filesystem::create_directory(certificatesFolder);
 	}
 
 	unsigned char* certificateBytes = nullptr;
-	const int certificateBytesCount = i2d_X509(certificate.x509.get(), &certificateBytes);
+	const int certificateBytesCount =
+	    i2d_X509(certificate.x509.get(), &certificateBytes);
 	ScopeExit scopeExit1{ [certificateBytes]() { free(certificateBytes); } };
 
-	std::ofstream certificateFile{ getCertificatePath(nodeID) };
-	certificateFile.write(reinterpret_cast<char*>(certificateBytes), certificateBytesCount);
+	std::ofstream certificateFile{ get_certificate_path(nodeID) };
+	certificateFile.write(reinterpret_cast<char*>(certificateBytes),
+	                      certificateBytesCount);
 
 	certificatesMap.try_emplace(nodeID, certificate);
 }
 
 [[nodiscard]] std::optional<X509_REQ_RAII>
-CertificateManager::generateCertificateRequest(const CertificateInfo& certificateInfo) {
-	const EVP_PKEY_CTX_RAII rsaCtxParameters{ EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, nullptr),
-		                                        ::EVP_PKEY_CTX_free };
+CertificateManager::generate_certificate_request(
+    const CertificateInfo& certificateInfo) {
+	const EVP_PKEY_CTX_RAII rsaCtxParameters{
+		EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, nullptr), ::EVP_PKEY_CTX_free
+	};
 	// If we failed to initialise the RSA key generator's context.
 	if (!rsaCtxParameters) {
 		return std::nullopt;
 	}
 
 	// Generate RSA key generator
-	if (EVP_PKEY_CTX_set_rsa_keygen_bits(rsaCtxParameters.get(),
-	                                     certificateInfo.certificateKeyLength) <= 0) {
+	if (EVP_PKEY_CTX_set_rsa_keygen_bits(
+	        rsaCtxParameters.get(), certificateInfo.certificateKeyLength) <= 0) {
 		return std::nullopt;
 	}
 
@@ -90,8 +101,9 @@ CertificateManager::generateCertificateRequest(const CertificateInfo& certificat
 	}
 	const EVP_PKEY_RAII rsaKeygenParams{ tempKeygenParams, ::EVP_PKEY_free };
 
-	const EVP_PKEY_CTX_RAII rsaCtx{ EVP_PKEY_CTX_new(rsaKeygenParams.get(), nullptr),
-		                              ::EVP_PKEY_CTX_free };
+	const EVP_PKEY_CTX_RAII rsaCtx{
+		EVP_PKEY_CTX_new(rsaKeygenParams.get(), nullptr), ::EVP_PKEY_CTX_free
+	};
 
 	// If we failed to generate a valid RSA context.
 	if (!rsaCtx) {
@@ -118,7 +130,8 @@ CertificateManager::generateCertificateRequest(const CertificateInfo& certificat
 
 	// Set certificate properties
 	X509_gmtime_adj(X509_get_notBefore(x509.get()), 0);
-	X509_gmtime_adj(X509_get_notAfter(x509.get()), certificateInfo.validityDuration);
+	X509_gmtime_adj(X509_get_notAfter(x509.get()),
+	                certificateInfo.validityDuration);
 
 	X509_REQ_RAII x509Req{ X509_REQ_new(), ::X509_REQ_free };
 
@@ -140,17 +153,19 @@ CertificateManager::generateCertificateRequest(const CertificateInfo& certificat
 		return std::nullopt;
 	}
 
-	if (X509_NAME_add_entry_by_txt(
-	        x509Name.get(), "C", MBSTRING_UTF8,
-	        reinterpret_cast<const unsigned char*>(certificateInfo.country.data()),
-	        certificateInfo.country.length(), -1, 0) != 1) {
+	if (X509_NAME_add_entry_by_txt(x509Name.get(), "C", MBSTRING_UTF8,
+	                               reinterpret_cast<const unsigned char*>(
+	                                   certificateInfo.country.data()),
+	                               certificateInfo.country.length(), -1,
+	                               0) != 1) {
 		return std::nullopt;
 	}
 
-	if (X509_NAME_add_entry_by_txt(
-	        x509Name.get(), "ST", MBSTRING_UTF8,
-	        reinterpret_cast<const unsigned char*>(certificateInfo.province.data()),
-	        certificateInfo.province.length(), -1, 0) != 1) {
+	if (X509_NAME_add_entry_by_txt(x509Name.get(), "ST", MBSTRING_UTF8,
+	                               reinterpret_cast<const unsigned char*>(
+	                                   certificateInfo.province.data()),
+	                               certificateInfo.province.length(), -1,
+	                               0) != 1) {
 		return std::nullopt;
 	}
 
@@ -161,17 +176,19 @@ CertificateManager::generateCertificateRequest(const CertificateInfo& certificat
 		return std::nullopt;
 	}
 
-	if (X509_NAME_add_entry_by_txt(
-	        x509Name.get(), "O", MBSTRING_UTF8,
-	        reinterpret_cast<const unsigned char*>(certificateInfo.organisation.data()),
-	        certificateInfo.organisation.length(), -1, 0) != 1) {
+	if (X509_NAME_add_entry_by_txt(x509Name.get(), "O", MBSTRING_UTF8,
+	                               reinterpret_cast<const unsigned char*>(
+	                                   certificateInfo.organisation.data()),
+	                               certificateInfo.organisation.length(), -1,
+	                               0) != 1) {
 		return std::nullopt;
 	}
 
-	if (X509_NAME_add_entry_by_txt(
-	        x509Name.get(), "CN", MBSTRING_UTF8,
-	        reinterpret_cast<const unsigned char*>(certificateInfo.commonName.data()),
-	        certificateInfo.commonName.length(), -1, 0) != 1) {
+	if (X509_NAME_add_entry_by_txt(x509Name.get(), "CN", MBSTRING_UTF8,
+	                               reinterpret_cast<const unsigned char*>(
+	                                   certificateInfo.commonName.data()),
+	                               certificateInfo.commonName.length(), -1,
+	                               0) != 1) {
 		return std::nullopt;
 	}
 
@@ -188,16 +205,17 @@ CertificateManager::generateCertificateRequest(const CertificateInfo& certificat
 	return x509Req;
 }
 
-std::shared_ptr<CertificateManager>
-CertificateManager::createInstance(const std::filesystem::path certificatesFolder) {
-	CertificateManager::instance =
-	    std::make_shared<CertificateManager>(CertificateManager{ certificatesFolder });
+std::shared_ptr<CertificateManager> CertificateManager::create_instance(
+    const std::filesystem::path& certificatesFolder) {
+	CertificateManager::instance = std::make_shared<CertificateManager>(
+	    CertificateManager{ certificatesFolder });
 
 	return CertificateManager::instance;
 }
 
-std::shared_ptr<CertificateManager> CertificateManager::getInstance() {
-	// Invalid semantics to request a certificate manager if no instance has yet been created
+std::shared_ptr<CertificateManager> CertificateManager::get_instance() {
+	// Invalid semantics to request a certificate manager if no instance has yet
+	// been created
 	assert(CertificateManager::instance);
 	return CertificateManager::instance;
 };

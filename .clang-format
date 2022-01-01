@@ -8,7 +8,7 @@ AlwaysBreakTemplateDeclarations: Yes
 BreakBeforeBraces: Attach
 BreakConstructorInitializers: BeforeColon
 Cpp11BracedListStyle: false
-ColumnLimit: 100
+ColumnLimit: 80
 DerivePointerAlignment: false
 FixNamespaceComments: true
 IndentCaseLabels: true
@@ -16,9 +16,9 @@ IndentPPDirectives: AfterHash
 Language: Cpp
 NamespaceIndentation: All
 PointerAlignment: Left
-SortIncludes: true
+SortIncludes: CaseSensitive
 SortUsingDeclarations: true
-Standard: Cpp11
+Standard: c++11
 TabWidth: 2
 UseTab: ForIndentation
 

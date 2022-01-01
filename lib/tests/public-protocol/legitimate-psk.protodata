@@ -1,0 +1,9 @@
+# Specify little-endianness
+little
+
+# Computing the PSK signature raw data
+u64 123456789
+utf8 "TestingKey"
+
+# Need to compute SHA256 of this value, using `sha256sum` or similar, and then represent as an array of bytes:
+# I.e. `pd legitimate-psk.protodata | sha256sum | cut -f 1 -d ' ' | sed -e 's/\([0-9a-f]\{2\}\)/+0x\1 /g' | pd -e 'little u8' - | xxd -i

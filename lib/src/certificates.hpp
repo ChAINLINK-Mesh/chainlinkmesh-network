@@ -9,7 +9,8 @@
 using NodeID = std::uint64_t;
 using BN_RAII = std::unique_ptr<BIGNUM, decltype(&::BN_free)>;
 using EVP_PKEY_RAII = std::unique_ptr<EVP_PKEY, decltype(&::EVP_PKEY_free)>;
-using EVP_PKEY_CTX_RAII = std::unique_ptr<EVP_PKEY_CTX, decltype(&::EVP_PKEY_CTX_free)>;
+using EVP_PKEY_CTX_RAII =
+    std::unique_ptr<EVP_PKEY_CTX, decltype(&::EVP_PKEY_CTX_free)>;
 using X509_RAII = std::shared_ptr<X509>;
 using X509_REQ_RAII = std::unique_ptr<X509_REQ, decltype(&::X509_REQ_free)>;
 using X509_NAME_RAII = std::unique_ptr<X509_NAME, decltype(&::X509_NAME_free)>;
@@ -31,21 +32,21 @@ public:
 	CertificateManager(CertificateManager&& other) = default;
 	~CertificateManager() = default;
 
-	[[nodiscard]] std::optional<Certificate> getCertificate(NodeID nodeID) const;
-	void setCertificate(NodeID nodeID, Certificate certificate);
+	[[nodiscard]] std::optional<Certificate> get_certificate(NodeID nodeID) const;
+	void set_certificate(NodeID nodeID, const Certificate& certificate);
 
 	// Generates a X509v3 certificate
 	[[nodiscard]] static std::optional<X509_REQ_RAII>
-	generateCertificateRequest(const CertificateInfo& certificateInfo);
+	generate_certificate_request(const CertificateInfo& certificateInfo);
 
 	static std::shared_ptr<CertificateManager>
-	createInstance(const std::filesystem::path certificatesFolder);
-	static std::shared_ptr<CertificateManager> getInstance();
+	create_instance(const std::filesystem::path& certificatesFolder);
+	static std::shared_ptr<CertificateManager> get_instance();
 
 protected:
-	CertificateManager(const std::filesystem::path certificatesFolder);
+	CertificateManager(std::filesystem::path certificatesFolder);
 
-	std::filesystem::path getCertificatePath(NodeID nodeID) const;
+	std::filesystem::path get_certificate_path(NodeID nodeID) const;
 
 	const std::filesystem::path certificatesFolder;
 	mutable std::map<NodeID, Certificate> certificatesMap;

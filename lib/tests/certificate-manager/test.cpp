@@ -10,17 +10,18 @@ void test() {
 
 void instantiate_certificate_manager() {
 	[[gnu::unused]] const auto certificateManager =
-	    CertificateManager::createInstance(std::filesystem::path{ "/" });
+	    CertificateManager::create_instance(std::filesystem::path{ "/" });
 }
 
 void generate_certificate_request() {
-	[[gnu::unused]] const auto certificateRequest = CertificateManager::generateCertificateRequest({
-	    .certificateKeyLength = 2048,
-	    .country = "US",
-	    .province = "California",
-	    .city = "San Francisco",
-	    .organisation = "Mozilla",
-	    .commonName = "www.mozilla.org",
-	    .validityDuration = 60 * 60 * 24 * 365 * 10,
-	});
+	[[gnu::unused]] const auto certificateRequest =
+	    CertificateManager::generate_certificate_request({
+	        .certificateKeyLength = 2048,
+	        .country = "US",
+	        .province = "California",
+	        .city = "San Francisco",
+	        .organisation = "Mozilla",
+	        .commonName = "www.mozilla.org",
+	        .validityDuration = 60 * 60 * 24 * 365 * 10,
+	    });
 }
