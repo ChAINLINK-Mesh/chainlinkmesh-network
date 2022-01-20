@@ -33,4 +33,6 @@ protected:
 	static Poco::Net::TCPServerParams::Ptr public_tcp_server_params();
 	static std::uint16_t default_port(std::uint16_t port,
 	                                  std::uint16_t fallbackPort);
+
+	static std::string generate_psk();
 };

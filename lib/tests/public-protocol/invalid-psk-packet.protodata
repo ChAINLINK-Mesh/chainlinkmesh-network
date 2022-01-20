@@ -3,7 +3,7 @@ little
 
 # Computing packet bytes
 u64 123456789
-file("legitimate-psk.sha256")
+file("invalid-psk.data")
 u64 987654321
 file("legitimate-psk-signature.sha256")
 file("legitimate-csr.csr")

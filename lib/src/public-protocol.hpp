@@ -38,13 +38,14 @@ struct InitialisationPacket {
 class PublicProtocolManager {
 public:
 	PublicProtocolManager(const Poco::Net::ServerSocket& serverSocket,
-	                      Poco::Net::TCPServerParams::Ptr params);
+	                      Poco::Net::TCPServerParams::Ptr params, std::string psk);
 	virtual ~PublicProtocolManager() = default;
 
 	void start();
 
 protected:
 	Poco::Net::TCPServer server;
+	std::string psk;
 };
 
 class ConnectionHandler : public Poco::Net::TCPServerConnection {
@@ -54,14 +55,20 @@ public:
 	void run() override;
 
 	static std::optional<InitialisationPacket>
-	decode_packet(std::span<const char> buffer);
+	decode_packet(std::span<const char> buffer, const std::string& psk);
 
 protected:
+	std::string psk;
+
 	using BufferType = Poco::FIFOBuffer;
-	static std::optional<InitialisationPacket> decode_packet(BufferType& buffer);
+	static std::optional<InitialisationPacket> decode_packet(BufferType& buffer,
+	                                                         const std::string& psk);
 
 	static std::optional<std::vector<std::uint8_t>>
 	base64_decode(std::span<char> bytes);
+
+	template <std::integral Integral>
+	static std::string byte_string(Integral value);
 
 	static const constexpr std::uint16_t SHA256_DIGEST_B64_SIZE =
 	    base64_encoded_character_count(SHA256_DIGEST_SIZE);

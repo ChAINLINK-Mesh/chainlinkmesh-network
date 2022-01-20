@@ -8,14 +8,26 @@
 
 PublicProtocolManager::PublicProtocolManager(
     const Poco::Net::ServerSocket& serverSocket,
-    Poco::Net::TCPServerParams::Ptr params)
-    : server{
-	      new Poco::Net::TCPServerConnectionFactoryImpl<ConnectionHandler>(),
-	      serverSocket, std::move(params)
-      } {}
+    Poco::Net::TCPServerParams::Ptr params, std::string psk)
+    : server{ new Poco::Net::TCPServerConnectionFactoryImpl<
+	                ConnectionHandler>(),
+	            serverSocket, std::move(params) },
+      psk{ std::move(psk) } {}
 
 void PublicProtocolManager::start() {
 	server.start();
+}
+
+template <std::integral Integral>
+std::string ConnectionHandler::byte_string(Integral value) {
+	union {
+		Integral baseType;
+		char bytes[sizeof(Integral)];
+	} aliasing = {
+		.baseType = value,
+	};
+
+	return std::string{ aliasing.bytes, aliasing.bytes + sizeof(Integral) };
 }
 
 // TODO: Investigate whether SO_LINGER should be disabled.
@@ -33,13 +45,13 @@ void ConnectionHandler::run() {
 		return;
 	}
 
-	if (const auto packet = decode_packet(buffer)) {
+	if (const auto packet = decode_packet(buffer, psk)) {
 		// TODO: Respond with necessary data.
 	}
 }
 
 std::optional<InitialisationPacket>
-ConnectionHandler::decode_packet(BufferType& buffer) {
+ConnectionHandler::decode_packet(BufferType& buffer, const std::string& psk) {
 	InitialisationPacket packet{};
 
 	{
@@ -54,14 +66,37 @@ ConnectionHandler::decode_packet(BufferType& buffer) {
 	}
 
 	{
-		char digest[SHA256_DIGEST_SIZE] = { 0 };
-		const auto read = buffer.read(digest, SHA256_DIGEST_SIZE);
+		std::array<char, SHA256_DIGEST_SIZE> digest{};
+		const auto read = buffer.read(digest.data(), SHA256_DIGEST_SIZE);
 
 		if (read != SHA256_DIGEST_SIZE) {
 			return std::nullopt;
 		}
 
-		std::copy_n(digest, SHA256_DIGEST_SIZE, packet.timestampPSKHash.begin());
+		// Re-compute timestamp-PSK hash and compare
+		const auto leTimestamp = Poco::ByteOrder::toLittleEndian(packet.timestamp);
+		const std::string timestampPSK =
+		    ConnectionHandler::byte_string(leTimestamp) + psk;
+		std::array<std::int8_t, EVP_MAX_MD_SIZE> timestampPSKRehash{};
+		unsigned int rehashSize = 0;
+
+		// Failed to compute SHA-256 digest
+		if (EVP_Digest(timestampPSK.data(), timestampPSK.size(),
+		               reinterpret_cast<std::uint8_t*>(timestampPSKRehash.data()),
+		               &rehashSize, EVP_sha256(), nullptr) == 0 ||
+		    rehashSize != SHA256_DIGEST_SIZE) {
+			return std::nullopt;
+		}
+
+		// Calculated digest was incorrect. I.e. the PSK was wrong.
+		if (!std::equal(timestampPSKRehash.begin(),
+		               timestampPSKRehash.begin() + SHA256_DIGEST_SIZE,
+		               digest.begin())) {
+			return std::nullopt;
+		}
+
+		std::copy_n(digest.data(), SHA256_DIGEST_SIZE,
+		            packet.timestampPSKHash.begin());
 	}
 
 	{
@@ -78,14 +113,14 @@ ConnectionHandler::decode_packet(BufferType& buffer) {
 	}
 
 	{
-		char signature[SHA256_SIGNATURE_SIZE] = { 0 };
-		const auto read = buffer.read(signature, SHA256_SIGNATURE_SIZE);
+		std::array<char, SHA256_SIGNATURE_SIZE> signature{};
+		const auto read = buffer.read(signature.data(), SHA256_SIGNATURE_SIZE);
 
 		if (read != SHA256_SIGNATURE_SIZE) {
 			return std::nullopt;
 		}
 
-		std::copy_n(signature, SHA256_SIGNATURE_SIZE,
+		std::copy_n(signature.data(), SHA256_SIGNATURE_SIZE,
 		            packet.timestampPSKSignature.begin());
 	}
 
@@ -124,8 +159,9 @@ ConnectionHandler::base64_decode(std::span<char> bytes) {
 }
 
 std::optional<InitialisationPacket>
-ConnectionHandler::decode_packet(const std::span<const char> buffer) {
+ConnectionHandler::decode_packet(std::span<const char> buffer,
+                                 const std::string& psk) {
 	BufferType fifoBuffer{ buffer.data(), buffer.size() };
 	fifoBuffer.setEOF(true);
-	return decode_packet(fifoBuffer);
+	return decode_packet(fifoBuffer, psk);
 }

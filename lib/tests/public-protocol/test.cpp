@@ -11,10 +11,12 @@ std::string read_file(const std::string& filename);
 
 void test_equality();
 void test_legitimate_packet();
+void test_invalid_psk_hash();
 
 void test() {
 	test_equality();
 	test_legitimate_packet();
+	test_invalid_psk_hash();
 }
 
 // Testing equality comparison
@@ -59,7 +61,7 @@ void test_equality() {
 
 // Legitimate PSK signature
 void test_legitimate_packet() {
-	const InitialisationPacket testPacket = {
+	const InitialisationPacket truePacket = {
 		.timestamp = 123456789ULL,
 		.timestampPSKHash = read_file<SHA256_DIGEST_SIZE>("legitimate-psk.sha256"),
 		.referringNode = 987654321ULL,
@@ -71,9 +73,28 @@ void test_legitimate_packet() {
 	const auto filePacket = read_file("legitimate-packet.data");
 
 	if (auto packet = ConnectionHandler::decode_packet(
-	        { filePacket.data(), filePacket.size() });
-	    !packet || packet.value() != testPacket) {
+	        { filePacket.data(), filePacket.size() }, "TestingKey");
+	    !packet || packet.value() != truePacket) {
 		throw "Failed to decode valid packet";
+	}
+}
+
+void test_invalid_psk_hash() {
+	const InitialisationPacket truePacket = {
+		.timestamp = 123456789ULL,
+		.timestampPSKHash = read_file<SHA256_DIGEST_SIZE>("legitimate-psk.sha256"),
+		.referringNode = 987654321ULL,
+		.timestampPSKSignature =
+		    read_file<SHA256_SIGNATURE_SIZE>("legitimate-psk-signature.sha256"),
+		.csr = read_file("legitimate-csr.csr"),
+	};
+
+	const auto invalidPacket = read_file("invalid-psk-packet.data");
+
+	if (auto packet = ConnectionHandler::decode_packet(
+	        { invalidPacket.data(), invalidPacket.size() }, "TestingKey");
+	    packet && packet.value() == truePacket) {
+		throw "Incorrectly decoded invalid packet";
 	}
 }
 

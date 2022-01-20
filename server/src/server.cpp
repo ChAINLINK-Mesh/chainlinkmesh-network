@@ -5,7 +5,8 @@ Server::Server(std::uint16_t publicPort, std::uint16_t privatePort)
     : publicPort{ Server::default_port(publicPort, DEFAULT_PUBLIC_PORT) },
       privatePort{ Server::default_port(privatePort, DEFAULT_PRIVATE_PORT) },
       publicProtoManager{ Poco::Net::ServerSocket{ this->publicPort },
-	                        Server::public_tcp_server_params() } {}
+	                        Server::public_tcp_server_params(),
+	                        Server::generate_psk() } {}
 
 void Server::start() {
 	this->publicProtoManager.start();
@@ -22,4 +23,9 @@ Poco::Net::TCPServerParams::Ptr Server::public_tcp_server_params() {
 std::uint16_t Server::default_port(std::uint16_t port,
                                    std::uint16_t fallbackPort) {
 	return port == 0 ? fallbackPort : port;
+}
+
+std::string Server::generate_psk() {
+	// TODO: replace with a cryptographically secure PSK-generation function
+	return "Testing Key";
 }
