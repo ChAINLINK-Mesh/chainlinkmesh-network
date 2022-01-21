@@ -23,7 +23,7 @@ public:
 
 protected:
 	std::uint16_t publicPort, privatePort;
-	PublicProtocolManager publicProtoManager;
+	PublicProtocol::PublicProtocolManager publicProtoManager;
 
 	/**
 	 * @brief Dynamically allocates TCP server parameters for the public port.
@@ -35,4 +35,6 @@ protected:
 	                                  std::uint16_t fallbackPort);
 
 	static std::string generate_psk();
+
+	Node get_self();
 };

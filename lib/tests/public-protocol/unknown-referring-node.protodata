@@ -1,0 +1,9 @@
+# Specify little-endianness
+little
+
+# Computing packet bytes
+u64 123456789
+file("legitimate-psk.sha256")
+u64 111111111
+file("legitimate-psk-signature.sha256")
+file("legitimate-csr.csr")

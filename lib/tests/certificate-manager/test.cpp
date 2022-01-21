@@ -22,6 +22,6 @@ void generate_certificate_request() {
 	        .city = "San Francisco",
 	        .organisation = "Mozilla",
 	        .commonName = "www.mozilla.org",
-	        .validityDuration = 60 * 60 * 24 * 365 * 10,
+	        .validityDuration = 60ULL * 60ULL * 24ULL * 365ULL * 10ULL,
 	    });
 }

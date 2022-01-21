@@ -1,0 +1,10 @@
+# Specify little-endianness
+little
+
+# Computing packet bytes
+u64 123456789
+file("legitimate-psk.sha256")
+u64 987654321
+# Use an invalid PSK signature
+file("invalid-psk-signature.sha256")
+file("legitimate-csr.csr")

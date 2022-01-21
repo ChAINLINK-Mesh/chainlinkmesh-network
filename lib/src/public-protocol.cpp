@@ -4,54 +4,34 @@
 #include <iostream>
 #include <limits>
 #include <openssl/evp.h>
+#include <openssl/pem.h>
 #include <utility>
 
-PublicProtocolManager::PublicProtocolManager(
-    const Poco::Net::ServerSocket& serverSocket,
-    Poco::Net::TCPServerParams::Ptr params, std::string psk)
-    : server{ new Poco::Net::TCPServerConnectionFactoryImpl<
-	                ConnectionHandler>(),
-	            serverSocket, std::move(params) },
-      psk{ std::move(psk) } {}
+using namespace PublicProtocol;
 
-void PublicProtocolManager::start() {
+template <std::integral IntType>
+constexpr IntType base64_decoded_character_count(const IntType bytes) noexcept {
+	const constexpr IntType b64GroupAlignment = 3;
+	const constexpr IntType b64GroupSize = 4;
+	assert(bytes % b64GroupSize == 0);
+
+	return (bytes / b64GroupSize) * b64GroupAlignment;
+}
+
+PublicProtocolManager::PublicProtocolManager(std::string psk, const Node& self)
+    : psk{ std::move(psk) } {
+	this->nodes.insert(std::make_pair(self.id, self));
+}
+
+void PublicProtocolManager::start(const Poco::Net::ServerSocket& serverSocket,
+                                  Poco::Net::TCPServerParams::Ptr params) {
+	Poco::Net::TCPServer server{ new ConnectionFactory(*this), serverSocket,
+		                           std::move(params) };
 	server.start();
 }
 
-template <std::integral Integral>
-std::string ConnectionHandler::byte_string(Integral value) {
-	union {
-		Integral baseType;
-		char bytes[sizeof(Integral)];
-	} aliasing = {
-		.baseType = value,
-	};
-
-	return std::string{ aliasing.bytes, aliasing.bytes + sizeof(Integral) };
-}
-
-// TODO: Investigate whether SO_LINGER should be disabled.
-ConnectionHandler::ConnectionHandler(const Poco::Net::StreamSocket& socket)
-    : Poco::Net::TCPServerConnection{ socket } {
-	this->socket().setReceiveBufferSize(INIT_PACKET_BUFFER_SIZE);
-}
-
-void ConnectionHandler::run() {
-	std::cout << "New connection from: "
-	          << socket().peerAddress().host().toString() << "\n";
-	BufferType buffer{ INIT_PACKET_BUFFER_SIZE };
-
-	if (socket().receiveBytes(buffer) < MIN_PACKET_BUFFER_SIZE) {
-		return;
-	}
-
-	if (const auto packet = decode_packet(buffer, psk)) {
-		// TODO: Respond with necessary data.
-	}
-}
-
 std::optional<InitialisationPacket>
-ConnectionHandler::decode_packet(BufferType& buffer, const std::string& psk) {
+PublicProtocolManager::decode_packet(BufferType& buffer) const {
 	InitialisationPacket packet{};
 
 	{
@@ -76,7 +56,7 @@ ConnectionHandler::decode_packet(BufferType& buffer, const std::string& psk) {
 		// Re-compute timestamp-PSK hash and compare
 		const auto leTimestamp = Poco::ByteOrder::toLittleEndian(packet.timestamp);
 		const std::string timestampPSK =
-		    ConnectionHandler::byte_string(leTimestamp) + psk;
+		    PublicProtocolManager::byte_string(leTimestamp) + this->psk;
 		std::array<std::int8_t, EVP_MAX_MD_SIZE> timestampPSKRehash{};
 		unsigned int rehashSize = 0;
 
@@ -90,8 +70,8 @@ ConnectionHandler::decode_packet(BufferType& buffer, const std::string& psk) {
 
 		// Calculated digest was incorrect. I.e. the PSK was wrong.
 		if (!std::equal(timestampPSKRehash.begin(),
-		               timestampPSKRehash.begin() + SHA256_DIGEST_SIZE,
-		               digest.begin())) {
+		                timestampPSKRehash.begin() + SHA256_DIGEST_SIZE,
+		                digest.begin())) {
 			return std::nullopt;
 		}
 
@@ -99,12 +79,18 @@ ConnectionHandler::decode_packet(BufferType& buffer, const std::string& psk) {
 		            packet.timestampPSKHash.begin());
 	}
 
+	std::optional<Node> referringNode{};
 	{
 		const auto read =
 		    buffer.read(reinterpret_cast<char*>(&packet.referringNode),
 		                sizeof(packet.referringNode));
 
 		if (read != sizeof(packet.referringNode)) {
+			return std::nullopt;
+		}
+
+		// Do not have details registered for referring node.
+		if (referringNode = this->get_node(packet.referringNode); !referringNode) {
 			return std::nullopt;
 		}
 
@@ -120,6 +106,38 @@ ConnectionHandler::decode_packet(BufferType& buffer, const std::string& psk) {
 			return std::nullopt;
 		}
 
+		// Compare timestamp-PSK signature
+		const auto leTimestamp = Poco::ByteOrder::toLittleEndian(packet.timestamp);
+		const std::string timestampPSK =
+		    PublicProtocolManager::byte_string(leTimestamp) + this->psk;
+
+		const auto nodePKey = get_node_pkey(*referringNode);
+		std::string typeName = EVP_PKEY_get0_type_name(nodePKey->get());
+		std::cout << typeName << "\n";
+		std::unique_ptr<EVP_MD_CTX, decltype(&::EVP_MD_CTX_free)> digestCtx{
+			EVP_MD_CTX_new(), &::EVP_MD_CTX_free
+		};
+
+		if (!digestCtx) {
+			return std::nullopt;
+		}
+
+		if (EVP_DigestVerifyInit(digestCtx.get(), nullptr, EVP_sha256(), nullptr,
+		                         nodePKey->get()) != 1) {
+			return std::nullopt;
+		}
+
+		const int verified = EVP_DigestVerify(
+		    digestCtx.get(),
+		    reinterpret_cast<const std::uint8_t*>(signature.data()),
+		    signature.size(),
+		    reinterpret_cast<const std::uint8_t*>(timestampPSK.data()),
+		    timestampPSK.size());
+
+		if (verified != 1) {
+			return std::nullopt;
+		}
+
 		std::copy_n(signature.data(), SHA256_SIGNATURE_SIZE,
 		            packet.timestampPSKSignature.begin());
 	}
@@ -130,17 +148,27 @@ ConnectionHandler::decode_packet(BufferType& buffer, const std::string& psk) {
 	return packet;
 }
 
-template <std::integral IntType>
-constexpr IntType base64_decoded_character_count(const IntType bytes) noexcept {
-	const constexpr IntType b64GroupAlignment = 3;
-	const constexpr IntType b64GroupSize = 4;
-	assert(bytes % b64GroupSize == 0);
+std::optional<InitialisationPacket>
+PublicProtocolManager::decode_packet(std::span<const char> buffer) {
+	BufferType fifoBuffer{ buffer.data(), buffer.size() };
+	fifoBuffer.setEOF(true);
+	return decode_packet(fifoBuffer);
+}
 
-	return (bytes / b64GroupSize) * b64GroupAlignment;
+template <std::integral Integral>
+std::string PublicProtocolManager::byte_string(Integral value) {
+	union {
+		Integral baseType;
+		char bytes[sizeof(Integral)]; // NOLINT(modernize-avoid-c-arrays)
+	} aliasing = {
+		.baseType = value,
+	};
+
+	return std::string{ aliasing.bytes, aliasing.bytes + sizeof(Integral) };
 }
 
 std::optional<std::vector<std::uint8_t>>
-ConnectionHandler::base64_decode(std::span<char> bytes) {
+PublicProtocolManager::base64_decode(std::span<char> bytes) {
 	assert(bytes.size() < std::numeric_limits<int>::max());
 	assert(!bytes.empty());
 
@@ -158,10 +186,80 @@ ConnectionHandler::base64_decode(std::span<char> bytes) {
 	return decoded;
 }
 
-std::optional<InitialisationPacket>
-ConnectionHandler::decode_packet(std::span<const char> buffer,
-                                 const std::string& psk) {
-	BufferType fifoBuffer{ buffer.data(), buffer.size() };
-	fifoBuffer.setEOF(true);
-	return decode_packet(fifoBuffer, psk);
+bool PublicProtocolManager::add_node(const Node& node) {
+	std::lock_guard<std::mutex> nodesLock{ nodesMutex };
+	return this->nodes.insert(std::make_pair(node.id, node)).second;
+}
+
+std::optional<Node>
+PublicProtocolManager::get_node(std::uint64_t nodeID) const {
+	std::lock_guard<std::mutex> nodesLock{ nodesMutex };
+	const auto value = this->nodes.find(nodeID);
+
+	if (value == this->nodes.end()) {
+		return std::nullopt;
+	}
+
+	return value->second;
+}
+
+bool PublicProtocolManager::delete_node(const Node& node) {
+	std::lock_guard<std::mutex> nodesLock{ nodesMutex };
+	return this->nodes.erase(node.id) == 1;
+}
+
+PublicProtocolManager::PublicProtocolManager(const PublicProtocolManager& other)
+    : psk{ other.psk } {
+	std::scoped_lock nodesLock{ other.nodesMutex, this->nodesMutex };
+	this->nodes = other.nodes;
+}
+
+std::optional<EVP_PKEY_RAII>
+PublicProtocolManager::get_node_pkey(const Node& node) {
+	const auto* data = reinterpret_cast<const uint8_t*>(node.publicKey.data());
+
+	std::unique_ptr<BIO, decltype(&::BIO_free)> dataBuf{
+		BIO_new_mem_buf(data, node.publicKey.size()), &::BIO_free
+	};
+	EVP_PKEY* tmpPKey =
+	    PEM_read_bio_PUBKEY(dataBuf.get(), nullptr, nullptr, nullptr);
+
+	if (!tmpPKey) {
+		return std::nullopt;
+	}
+
+	return EVP_PKEY_RAII{ tmpPKey, &::EVP_PKEY_free };
+}
+
+PublicProtocolManager::ConnectionFactory::ConnectionFactory(
+    PublicProtocolManager& parent)
+    : parent{ parent } {}
+
+Poco::Net::TCPServerConnection*
+PublicProtocolManager::ConnectionFactory::createConnection(
+    const Poco::Net::StreamSocket& socket) {
+	return new PublicConnection{ socket, parent };
+}
+
+// TODO: Investigate whether SO_LINGER should be disabled.
+PublicConnection::PublicConnection(const Poco::Net::StreamSocket& socket,
+                                   PublicProtocolManager& parent)
+    : Poco::Net::TCPServerConnection{ socket }, parent{ parent } {
+	this->socket().setReceiveBufferSize(
+	    PublicProtocolManager::INIT_PACKET_BUFFER_SIZE);
+}
+
+void PublicConnection::run() {
+	std::cout << "New connection from: "
+	          << socket().peerAddress().host().toString() << "\n";
+	BufferType buffer{ PublicProtocolManager::INIT_PACKET_BUFFER_SIZE };
+
+	if (socket().receiveBytes(buffer) <
+	    PublicProtocolManager::MIN_PACKET_BUFFER_SIZE) {
+		return;
+	}
+
+	if (const auto packet = parent.decode_packet(buffer)) {
+		// TODO: Respond with necessary data.
+	}
 }

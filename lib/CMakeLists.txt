@@ -11,6 +11,7 @@ set(HEADER_FILES
         certificates.hpp
         public-protocol.hpp
         scope-exit.hpp
+        node.hpp
         )
 set(SOURCE_FILES
         certificates.cpp
@@ -64,7 +65,7 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../dependencies/poco ${CMAKE_INSTAL
 add_library(${PROJECT_NAME} SHARED STATIC ${SOURCE_FILES} ${HEADER_FILES})
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_INSTALL_PREFIX}/include PUBLIC ${SRC_DIRECTORY})
 target_compile_options(${PROJECT_NAME} PRIVATE ${BASE_COMPILE_ARGS})
-set_target_properties(${PROJECT_NAME} PROPERTIES PUBLIC_HEADER ${HEADER_FILES})
+set_target_properties(${PROJECT_NAME} PROPERTIES PUBLIC_HEADER "${HEADER_FILES}")
 target_link_directories(${PROJECT_NAME} PUBLIC ${CMAKE_INSTALL_PREFIX}/lib)
 target_link_libraries(${PROJECT_NAME} PUBLIC Poco::Net crypto pthread)
 
@@ -96,6 +97,16 @@ SUBDIRLIST(SUBDIRS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
 
 FOREACH (subdir ${SUBDIRS})
     add_executable(${subdir} tests/test_base.cpp tests/${subdir}/test.cpp)
+    IF (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}/Makefile")
+        ExternalProject_Add(
+                "${subdir}_Makefile" SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}"
+                PATCH_COMMAND ""
+                CONFIGURE_COMMAND ""
+                BUILD_COMMAND ${MAKE_EXECUTABLE} -C "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}"
+                INSTALL_COMMAND ""
+        )
+        add_dependencies(${subdir} "${subdir}_Makefile")
+    ENDIF ()
     target_compile_options(${subdir} PRIVATE ${BASE_COMPILE_ARGS})
     target_link_libraries(${subdir} ${PROJECT_NAME})
     add_test(NAME ${subdir}
