@@ -1,15 +1,12 @@
 #include <cassert>
 #include <filesystem>
 #include <fstream>
+#include <openssl/pem.h>
 #include <public-protocol.hpp>
 #include <string>
+#include <test.hpp>
 
 using namespace PublicProtocol;
-
-template <size_t ReadSize>
-std::array<std::uint8_t, ReadSize> read_file(const std::string& filename);
-
-std::string read_file(const std::string& filename);
 PublicProtocolManager get_testing_protocol_manager();
 InitialisationPacket get_legitimate_packet();
 
@@ -33,7 +30,7 @@ void test_equality() {
 	InitialisationPacket packet2 = get_legitimate_packet();
 
 	if (packet1 != packet2) {
-		throw "Equality comparison is not working";
+		throw "Equality comparison is not working for similar packets";
 	}
 
 	// Wrong timestamp.
@@ -45,10 +42,17 @@ void test_equality() {
 
 	// Wrong CSR.
 	packet2.timestamp = 123456789ULL;
-	packet2.csr = packet2.csr.substr(0, packet2.csr.size() - 1);
+	auto* subjectName{ X509_REQ_get_subject_name(packet2.csr.get()) };
+	auto* newName{ X509_NAME_dup(subjectName) };
+	unsigned char newLocality[] = "New locality";
+	if (X509_NAME_add_entry_by_txt(newName, "L", MBSTRING_UTF8, newLocality,
+	                               sizeof(newLocality) - 1, -1, 0) < 0) {
+		throw "Failed to add entry to subject name";
+	}
+	X509_REQ_set_subject_name(packet2.csr.get(), newName);
 
 	if (packet1 == packet2) {
-		throw "Equality comparison is not working";
+		throw "Equality comparison is not working for invalid csr";
 	}
 }
 
@@ -98,18 +102,9 @@ InitialisationPacket get_legitimate_packet() {
 		.referringNode = 987654321ULL,
 		.timestampPSKSignature =
 		    read_file<SHA256_SIGNATURE_SIZE>("legitimate-psk-signature.sha256"),
-		.csr = read_file("legitimate-csr.csr"),
+		.csr = CertificateManager::decode_pem_csr(read_file("legitimate-csr.csr"))
+		           .value(),
 	};
-}
-
-std::string read_file(const std::string& filename) {
-	std::ifstream file{ filename };
-	const auto fileSize = std::filesystem::file_size(filename);
-	assert(fileSize < std::numeric_limits<long>::max());
-
-	std::string fileData(fileSize, '\0');
-	file.read(fileData.data(), fileSize);
-	return fileData;
 }
 
 PublicProtocolManager get_testing_protocol_manager() {
@@ -118,18 +113,12 @@ PublicProtocolManager get_testing_protocol_manager() {
 		Node{
 		    .id = 987654321ULL,
 		    .publicKey = read_file("legitimate-ca-pubkey.pem"),
-		    .meshIP = Poco::Net::IPAddress{ "127.0.0.1" },
+		    .meshIP = Poco::Net::IPAddress{ "10.0.0.1" },
+		    .wireguardIP = Poco::Net::IPAddress{ "127.0.0.1" },
+		    .controlPlanePort = Node::DEFAULT_CONTROL_PLANE_PORT,
+		    .wireguardPort = Node::DEFAULT_WIREGUARD_PORT,
 		}
 	};
 
 	return protocolManager;
-}
-
-template <size_t ReadSize>
-std::array<std::uint8_t, ReadSize> read_file(const std::string& filename) {
-	const auto fileData = read_file(filename);
-	assert(fileData.size() == ReadSize);
-	std::array<std::uint8_t, ReadSize> result{};
-	std::copy(fileData.begin(), fileData.end(), result.begin());
-	return result;
 }

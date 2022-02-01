@@ -1,4 +1,4 @@
-TARGETS = legitimate-ca-pubkey.pem legitimate-packet.data legitimate-psk.data legitimate-psk.sha256 legitimate-psk-signature.sha256 invalid-psk.data invalid-psk-packet.data invalid-psk-signature.sha256 invalid-psk-signature-packet.data invalid-ca-key.pem unknown-referring-node.data
+TARGETS = legitimate-ca-pubkey.pem legitimate-packet.data legitimate-psk.data legitimate-psk.sha256 legitimate-psk-signature.sha256 invalid-psk.data invalid-psk-packet.data invalid-psk-signature.sha256 invalid-psk-signature-packet.data invalid-ca-key.pem unknown-referring-node.data legitimate-csr.csr
 
 all: $(TARGETS)
 
@@ -14,12 +14,12 @@ all: $(TARGETS)
 .PHONY: clean
 
 clean:
-	rm $(TARGETS)
+	rm -f $(TARGETS)
 
 legitimate-psk-signature.sha256: legitimate-psk.data legitimate-ca-key.pem
 	openssl dgst -sha256 -binary -sign legitimate-ca-key.pem -out $@ < $<
 
-legitimate-packet.data: legitimate-packet.protodata legitimate-psk.sha256 legitimate-psk-signature.sha256
+legitimate-packet.data: legitimate-packet.protodata legitimate-psk.sha256 legitimate-psk-signature.sha256 legitimate-csr.csr
 	pd $< -o $@
 
 invalid-psk.data: legitimate-psk.data
@@ -38,5 +38,8 @@ invalid-psk-signature.sha256: legitimate-psk.data invalid-ca-key.pem
 invalid-psk-signature-packet.data: invalid-psk-signature-packet.protodata invalid-psk-signature.sha256
 	pd $< -o $@
 
-unknown-referring-packet.data: unknown-referring-node.protodata legitimate-psk.sha256 legitimate-psk-signature.sha256 legitimate-csr.csr
+unknown-referring-node.data: unknown-referring-node.protodata legitimate-psk.sha256 legitimate-psk-signature.sha256 legitimate-csr.csr
 	pd $< -o $@
+
+legitimate-csr.csr: legitimate-csr-key.pem
+	openssl req -new -nodes -key legitimate-csr-key.pem -out legitimate-csr.csr -subj "/C=UK/ST=Test State/L=Test City/O=Test Organisation/OU=Test Organisational Unit/CN=Test Common Name"

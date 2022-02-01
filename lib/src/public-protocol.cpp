@@ -1,4 +1,5 @@
 #include "public-protocol.hpp"
+#include "utilities.hpp"
 #include <Poco/ByteOrder.h>
 #include <cassert>
 #include <iostream>
@@ -19,7 +20,7 @@ constexpr IntType base64_decoded_character_count(const IntType bytes) noexcept {
 }
 
 PublicProtocolManager::PublicProtocolManager(std::string psk, const Node& self)
-    : psk{ std::move(psk) } {
+    : psk{ std::move(psk) }, selfNode{ self } {
 	this->nodes.insert(std::make_pair(self.id, self));
 }
 
@@ -112,8 +113,6 @@ PublicProtocolManager::decode_packet(BufferType& buffer) const {
 		    PublicProtocolManager::byte_string(leTimestamp) + this->psk;
 
 		const auto nodePKey = get_node_pkey(*referringNode);
-		std::string typeName = EVP_PKEY_get0_type_name(nodePKey->get());
-		std::cout << typeName << "\n";
 		std::unique_ptr<EVP_MD_CTX, decltype(&::EVP_MD_CTX_free)> digestCtx{
 			EVP_MD_CTX_new(), &::EVP_MD_CTX_free
 		};
@@ -142,8 +141,44 @@ PublicProtocolManager::decode_packet(BufferType& buffer) const {
 		            packet.timestampPSKSignature.begin());
 	}
 
-	packet.csr.resize(buffer.used());
-	buffer.read(packet.csr.data(), packet.csr.size());
+	{
+		std::string csrBytes(buffer.used(), '\0');
+		buffer.read(csrBytes.data(), csrBytes.size());
+
+		if (auto optCSR = CertificateManager::decode_pem_csr(csrBytes)) {
+			packet.csr = std::move(optCSR.value());
+			const auto* subjectName = X509_REQ_get_subject_name(packet.csr.get());
+
+			if (subjectName == nullptr) {
+				return std::nullopt;
+			}
+
+			const int cnIndex =
+			    X509_NAME_get_index_by_NID(subjectName, NID_commonName, -1);
+
+			if (cnIndex < 0) {
+				return std::nullopt;
+			}
+
+			const auto* entry = X509_NAME_get_entry(subjectName, cnIndex);
+			const auto* entryASNString = X509_NAME_ENTRY_get_data(entry);
+			unsigned char* entryCharArray = nullptr;
+			const int entryCharArraySize =
+			    ASN1_STRING_to_UTF8(&entryCharArray, entryASNString);
+			OPENSSL_RAII<unsigned char> entryCharArrayRAII{ entryCharArray };
+
+			if (entryCharArraySize < 0) {
+				return std::nullopt;
+			}
+
+			const std::string entryString{
+				entryCharArrayRAII.get(), entryCharArrayRAII.get() + entryCharArraySize
+			};
+			std::clog << "Subject name: " << entryString << "\n";
+		} else {
+			return std::nullopt;
+		}
+	}
 
 	return packet;
 }
@@ -175,9 +210,10 @@ PublicProtocolManager::base64_decode(std::span<char> bytes) {
 	const std::integral auto expectedDecodedByteCount =
 	    base64_decoded_character_count(bytes.size());
 	std::vector<std::uint8_t> decoded(expectedDecodedByteCount, '\0');
-	const decltype(expectedDecodedByteCount) decodedByteCount = EVP_DecodeBlock(
-	    reinterpret_cast<unsigned char*>(decoded.data()),
-	    reinterpret_cast<unsigned char*>(bytes.data()), bytes.size());
+	const decltype(expectedDecodedByteCount) decodedByteCount =
+	    EVP_DecodeBlock(reinterpret_cast<unsigned char*>(decoded.data()),
+	                    reinterpret_cast<unsigned char*>(bytes.data()),
+	                    static_cast<int>(bytes.size()));
 
 	if (decodedByteCount != expectedDecodedByteCount) {
 		return std::nullopt;
@@ -209,26 +245,38 @@ bool PublicProtocolManager::delete_node(const Node& node) {
 }
 
 PublicProtocolManager::PublicProtocolManager(const PublicProtocolManager& other)
-    : psk{ other.psk } {
+    : psk{ other.psk }, selfNode{ other.selfNode } {
 	std::scoped_lock nodesLock{ other.nodesMutex, this->nodesMutex };
 	this->nodes = other.nodes;
 }
 
 std::optional<EVP_PKEY_RAII>
 PublicProtocolManager::get_node_pkey(const Node& node) {
+	assert(node.publicKey.size() < std::numeric_limits<int>::max());
 	const auto* data = reinterpret_cast<const uint8_t*>(node.publicKey.data());
 
 	std::unique_ptr<BIO, decltype(&::BIO_free)> dataBuf{
-		BIO_new_mem_buf(data, node.publicKey.size()), &::BIO_free
+		BIO_new_mem_buf(data, static_cast<int>(node.publicKey.size())), &::BIO_free
 	};
 	EVP_PKEY* tmpPKey =
 	    PEM_read_bio_PUBKEY(dataBuf.get(), nullptr, nullptr, nullptr);
 
-	if (!tmpPKey) {
+	if (tmpPKey == nullptr) {
 		return std::nullopt;
 	}
 
-	return EVP_PKEY_RAII{ tmpPKey, &::EVP_PKEY_free };
+	return EVP_PKEY_RAII{ tmpPKey };
+}
+
+std::optional<InitialisationRespPacket>
+PublicProtocolManager::create_response(InitialisationPacket&& packet) {
+	// TODO: Complete.
+	return InitialisationRespPacket{
+		.signedCSR = std::move(packet.csr),
+		.publicKey = this->selfNode.publicKey,
+		.ipAddress = this->selfNode.meshIP,
+		.port = this->selfNode.controlPlanePort,
+	};
 }
 
 PublicProtocolManager::ConnectionFactory::ConnectionFactory(
@@ -262,4 +310,44 @@ void PublicConnection::run() {
 	if (const auto packet = parent.decode_packet(buffer)) {
 		// TODO: Respond with necessary data.
 	}
+}
+
+std::strong_ordering
+InitialisationPacket::operator<=>(const InitialisationPacket& other) const {
+	const auto nonCert =
+	    std::make_tuple(this->timestamp, this->referringNode,
+	                    this->timestampPSKSignature, this->timestampPSKHash) <= >
+	    std::make_tuple(other.timestamp, other.referringNode,
+	                    other.timestampPSKSignature, other.timestampPSKHash);
+
+	if (nonCert != std::strong_ordering::equal) {
+		return nonCert;
+	}
+
+	unsigned char* thisCSR = nullptr;
+	const auto thisCSRSize = i2d_X509_REQ(this->csr.get(), &thisCSR);
+	OPENSSL_RAII<unsigned char> thisCSRRAII{ thisCSR };
+	if (thisCSRSize < 0) {
+		// If encoding this packet's CSR to DER failed, just return equality.
+		return std::strong_ordering::equal;
+	}
+
+	unsigned char* otherCSR = nullptr;
+	const auto otherCSRSize = i2d_X509_REQ(other.csr.get(), &otherCSR);
+	OPENSSL_RAII<unsigned char> otherCSRRAII{ otherCSR };
+	if (otherCSRSize < 0) {
+		// If encoding other packet's CSR to DER failed, just return equality.
+		return std::strong_ordering::equal;
+	}
+
+	if (thisCSRSize != otherCSRSize) {
+		return thisCSRSize <= > otherCSRSize;
+	}
+
+	return compare(thisCSRRAII.get(), thisCSRRAII.get() + thisCSRSize,
+	               otherCSRRAII.get());
+}
+
+bool InitialisationPacket::operator==(const InitialisationPacket& other) const {
+	return (*this <= > other) == std::strong_ordering::equal;
 }

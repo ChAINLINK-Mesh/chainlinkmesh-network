@@ -1,12 +1,12 @@
 #pragma once
+#include "certificates.hpp"
+#include "node.hpp"
 #include <Poco/Net/TCPServer.h>
-#include <mutex>
-#include <map>
 #include <concepts>
+#include <map>
+#include <mutex>
 #include <optional>
 #include <span>
-#include "node.hpp"
-#include "certificates.hpp"
 
 namespace PublicProtocol {
 	const constexpr std::uint16_t SHA256_DIGEST_SIZE = 32;
@@ -38,16 +38,27 @@ namespace PublicProtocol {
 		Hash timestampPSKHash;
 		std::uint64_t referringNode;
 		Signature timestampPSKSignature;
-		std::string csr;
+		X509_REQ_RAII csr;
 
-		bool operator<=>(const InitialisationPacket& other) const = default;
+		std::strong_ordering operator<=>(const InitialisationPacket& other) const;
+		bool operator==(const InitialisationPacket& other) const;
+		bool operator!=(const InitialisationPacket& other) const = default;
+	};
+
+	struct InitialisationRespPacket {
+		using WireGuardPublicKey = Node::WireGuardPublicKey;
+
+		X509_REQ_RAII signedCSR;
+		WireGuardPublicKey publicKey;
+		Poco::Net::IPAddress ipAddress;
+		std::uint16_t port;
 	};
 
 	class PublicConnection;
 
 	class PublicProtocolManager {
 	public:
-		PublicProtocolManager(std::string psk, const Node &self);
+		PublicProtocolManager(std::string psk, const Node& self);
 		PublicProtocolManager(const PublicProtocolManager& other);
 		virtual ~PublicProtocolManager() = default;
 
@@ -57,12 +68,16 @@ namespace PublicProtocol {
 		std::optional<InitialisationPacket>
 		decode_packet(std::span<const char> buffer);
 
+		std::optional<InitialisationRespPacket>
+		create_response(InitialisationPacket&& packet);
+
 		bool add_node(const Node& node);
 		std::optional<Node> get_node(std::uint64_t nodeID) const;
 		bool delete_node(const Node& node);
 
 	protected:
 		const std::string psk;
+		const Node selfNode;
 		mutable std::mutex nodesMutex;
 		std::map<std::uint64_t, Node> nodes;
 

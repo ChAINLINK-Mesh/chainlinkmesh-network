@@ -12,6 +12,7 @@ set(HEADER_FILES
         public-protocol.hpp
         scope-exit.hpp
         node.hpp
+        utilities.hpp
         )
 set(SOURCE_FILES
         certificates.cpp
@@ -97,12 +98,14 @@ SUBDIRLIST(SUBDIRS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
 
 FOREACH (subdir ${SUBDIRS})
     add_executable(${subdir} tests/test_base.cpp tests/${subdir}/test.cpp)
+    target_include_directories(${subdir} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     IF (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}/Makefile")
         ExternalProject_Add(
                 "${subdir}_Makefile" SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}"
                 PATCH_COMMAND ""
                 CONFIGURE_COMMAND ""
                 BUILD_COMMAND ${MAKE_EXECUTABLE} -C "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}"
+                BUILD_ALWAYS true
                 INSTALL_COMMAND ""
         )
         add_dependencies(${subdir} "${subdir}_Makefile")

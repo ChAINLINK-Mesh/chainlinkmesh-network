@@ -3,6 +3,8 @@
 #include <cassert>
 #include <fstream>
 #include <openssl/evp.h>
+#include <openssl/pem.h>
+#include <openssl/x509.h>
 #include <vector>
 
 std::shared_ptr<CertificateManager> CertificateManager::instance = nullptr;
@@ -54,7 +56,7 @@ CertificateManager::get_certificate(const NodeID nodeID) const {
 	X509* temp;
 	d2i_X509(&temp, &bytePointer, nodeCertificateBytes.size());
 
-	Certificate certificate{ nodeID, X509_RAII{ temp, X509_free } };
+	Certificate certificate{ nodeID, X509_RAII_SHARED{ temp, &::X509_free } };
 
 	return certificate;
 }
@@ -81,9 +83,17 @@ void CertificateManager::set_certificate(NodeID nodeID,
 [[nodiscard]] std::optional<X509_REQ_RAII>
 CertificateManager::generate_certificate_request(
     const CertificateInfo& certificateInfo) {
-	const EVP_PKEY_CTX_RAII rsaCtxParameters{
-		EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, nullptr), ::EVP_PKEY_CTX_free
-	};
+	assert(certificateInfo.country.size() < std::numeric_limits<int>::max());
+	assert(certificateInfo.province.size() < std::numeric_limits<int>::max());
+	assert(certificateInfo.city.size() < std::numeric_limits<int>::max());
+	assert(certificateInfo.organisation.size() < std::numeric_limits<int>::max());
+	assert(certificateInfo.commonName.size() < std::numeric_limits<int>::max());
+	assert(certificateInfo.certificateKeyLength <
+	       std::numeric_limits<int>::max());
+	assert(certificateInfo.validityDuration < std::numeric_limits<int>::max());
+
+	const EVP_PKEY_CTX_RAII rsaCtxParameters{ EVP_PKEY_CTX_new_id(EVP_PKEY_RSA,
+		                                                            nullptr) };
 	// If we failed to initialise the RSA key generator's context.
 	if (!rsaCtxParameters) {
 		return std::nullopt;
@@ -91,7 +101,8 @@ CertificateManager::generate_certificate_request(
 
 	// Generate RSA key generator
 	if (EVP_PKEY_CTX_set_rsa_keygen_bits(
-	        rsaCtxParameters.get(), certificateInfo.certificateKeyLength) <= 0) {
+	        rsaCtxParameters.get(),
+	        static_cast<int>(certificateInfo.certificateKeyLength)) <= 0) {
 		return std::nullopt;
 	}
 
@@ -99,11 +110,10 @@ CertificateManager::generate_certificate_request(
 	if (EVP_PKEY_paramgen(rsaCtxParameters.get(), &tempKeygenParams) != 1) {
 		return std::nullopt;
 	}
-	const EVP_PKEY_RAII rsaKeygenParams{ tempKeygenParams, ::EVP_PKEY_free };
+	const EVP_PKEY_RAII rsaKeygenParams{ tempKeygenParams };
 
-	const EVP_PKEY_CTX_RAII rsaCtx{
-		EVP_PKEY_CTX_new(rsaKeygenParams.get(), nullptr), ::EVP_PKEY_CTX_free
-	};
+	const EVP_PKEY_CTX_RAII rsaCtx{ EVP_PKEY_CTX_new(rsaKeygenParams.get(),
+		                                               nullptr) };
 
 	// If we failed to generate a valid RSA context.
 	if (!rsaCtx) {
@@ -118,10 +128,10 @@ CertificateManager::generate_certificate_request(
 	if (EVP_PKEY_keygen(rsaCtx.get(), &tempRSAKey) != 1) {
 		return std::nullopt;
 	}
-	const EVP_PKEY_RAII rsaKey{ tempRSAKey, ::EVP_PKEY_free };
+	const EVP_PKEY_RAII rsaKey{ tempRSAKey };
 
 	// Generate X509 representation
-	const X509_RAII x509{ X509_new(), ::X509_free };
+	const X509_RAII_SHARED x509{ X509_new(), &::X509_free };
 
 	// If we failed to initialise the X509 representation.
 	if (!x509) {
@@ -131,9 +141,9 @@ CertificateManager::generate_certificate_request(
 	// Set certificate properties
 	X509_gmtime_adj(X509_get_notBefore(x509.get()), 0);
 	X509_gmtime_adj(X509_get_notAfter(x509.get()),
-	                certificateInfo.validityDuration);
+	                static_cast<long>(certificateInfo.validityDuration));
 
-	X509_REQ_RAII x509Req{ X509_REQ_new(), ::X509_REQ_free };
+	X509_REQ_RAII x509Req{ X509_REQ_new() };
 
 	// If we failed to initialise the X509 request representation.
 	if (!x509Req) {
@@ -147,48 +157,49 @@ CertificateManager::generate_certificate_request(
 	}
 
 	// Set certificate subject
-	X509_NAME_RAII x509Name{ X509_NAME_new(), ::X509_NAME_free };
+	X509_NAME_RAII x509Name{ X509_NAME_new() };
 
 	if (!x509Name) {
 		return std::nullopt;
 	}
 
-	if (X509_NAME_add_entry_by_txt(x509Name.get(), "C", MBSTRING_UTF8,
-	                               reinterpret_cast<const unsigned char*>(
-	                                   certificateInfo.country.data()),
-	                               certificateInfo.country.length(), -1,
-	                               0) != 1) {
+	if (X509_NAME_add_entry_by_txt(
+	        x509Name.get(), "C", MBSTRING_UTF8,
+	        reinterpret_cast<const unsigned char*>(
+	            certificateInfo.country.data()),
+	        static_cast<int>(certificateInfo.country.length()), -1, 0) != 1) {
 		return std::nullopt;
 	}
 
-	if (X509_NAME_add_entry_by_txt(x509Name.get(), "ST", MBSTRING_UTF8,
-	                               reinterpret_cast<const unsigned char*>(
-	                                   certificateInfo.province.data()),
-	                               certificateInfo.province.length(), -1,
-	                               0) != 1) {
+	if (X509_NAME_add_entry_by_txt(
+	        x509Name.get(), "ST", MBSTRING_UTF8,
+	        reinterpret_cast<const unsigned char*>(
+	            certificateInfo.province.data()),
+	        static_cast<int>(certificateInfo.province.length()), -1, 0) != 1) {
 		return std::nullopt;
 	}
 
 	if (X509_NAME_add_entry_by_txt(
 	        x509Name.get(), "L", MBSTRING_UTF8,
 	        reinterpret_cast<const unsigned char*>(certificateInfo.city.data()),
-	        certificateInfo.city.length(), -1, 0) != 1) {
+	        static_cast<int>(certificateInfo.city.length()), -1, 0) != 1) {
 		return std::nullopt;
 	}
 
-	if (X509_NAME_add_entry_by_txt(x509Name.get(), "O", MBSTRING_UTF8,
-	                               reinterpret_cast<const unsigned char*>(
-	                                   certificateInfo.organisation.data()),
-	                               certificateInfo.organisation.length(), -1,
-	                               0) != 1) {
+	if (X509_NAME_add_entry_by_txt(
+	        x509Name.get(), "O", MBSTRING_UTF8,
+	        reinterpret_cast<const unsigned char*>(
+	            certificateInfo.organisation.data()),
+	        static_cast<int>(certificateInfo.organisation.length()), -1,
+	        0) != 1) {
 		return std::nullopt;
 	}
 
-	if (X509_NAME_add_entry_by_txt(x509Name.get(), "CN", MBSTRING_UTF8,
-	                               reinterpret_cast<const unsigned char*>(
-	                                   certificateInfo.commonName.data()),
-	                               certificateInfo.commonName.length(), -1,
-	                               0) != 1) {
+	if (X509_NAME_add_entry_by_txt(
+	        x509Name.get(), "CN", MBSTRING_UTF8,
+	        reinterpret_cast<const unsigned char*>(
+	            certificateInfo.commonName.data()),
+	        static_cast<int>(certificateInfo.commonName.length()), -1, 0) != 1) {
 		return std::nullopt;
 	}
 
@@ -218,4 +229,61 @@ std::shared_ptr<CertificateManager> CertificateManager::get_instance() {
 	// been created
 	assert(CertificateManager::instance);
 	return CertificateManager::instance;
+}
+
+std::optional<X509_RAII_SHARED>
+CertificateManager::decode_pem_certificate(const std::string_view pem) {
+	assert(pem.size() < std::numeric_limits<int>::max());
+
+	BIO_RAII bio{ BIO_new(BIO_s_mem()) };
+
+	if (bio == nullptr) {
+		return std::nullopt;
+	}
+
+	const auto writtenBytes =
+	    BIO_write(bio.get(), static_cast<const void*>(pem.data()),
+	              static_cast<int>(pem.size()));
+	if (writtenBytes < 0 ||
+	    static_cast<std::string::size_type>(writtenBytes) != pem.size()) {
+		return std::nullopt;
+	}
+
+	X509_RAII_SHARED certificate{
+		PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr), &::X509_free
+	};
+
+	if (!certificate) {
+		return std::nullopt;
+	}
+
+	return certificate;
+}
+
+std::optional<X509_REQ_RAII>
+CertificateManager::decode_pem_csr(std::string_view pem) {
+	assert(pem.size() < std::numeric_limits<int>::max());
+
+	BIO_RAII bio{ BIO_new(BIO_s_mem()) };
+
+	if (bio == nullptr) {
+		return std::nullopt;
+	}
+
+	const auto writtenBytes =
+	    BIO_write(bio.get(), static_cast<const void*>(pem.data()),
+	              static_cast<int>(pem.size()));
+	if (writtenBytes < 0 ||
+	    static_cast<std::string::size_type>(writtenBytes) != pem.size()) {
+		return std::nullopt;
+	}
+
+	X509_REQ_RAII certificate{ PEM_read_bio_X509_REQ(bio.get(), nullptr, nullptr,
+		                                               nullptr) };
+
+	if (!certificate) {
+		return std::nullopt;
+	}
+
+	return certificate;
 };

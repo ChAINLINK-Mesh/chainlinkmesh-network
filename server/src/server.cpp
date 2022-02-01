@@ -1,6 +1,6 @@
 #include "server.hpp"
 
-// Assign default port values if custom ports are not specified.
+// Assign default controlPlanePort values if custom ports are not specified.
 Server::Server(std::uint16_t publicPort, std::uint16_t privatePort)
     : publicPort{ Server::default_port(publicPort, DEFAULT_PUBLIC_PORT) },
       privatePort{ Server::default_port(privatePort, DEFAULT_PRIVATE_PORT) },

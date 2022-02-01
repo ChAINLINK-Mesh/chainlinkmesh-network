@@ -2,10 +2,12 @@
 
 void instantiate_certificate_manager();
 void generate_certificate_request();
+void decode_pem_csr();
 
 void test() {
 	instantiate_certificate_manager();
 	generate_certificate_request();
+	decode_pem_csr();
 }
 
 void instantiate_certificate_manager() {
@@ -25,3 +27,5 @@ void generate_certificate_request() {
 	        .validityDuration = 60ULL * 60ULL * 24ULL * 365ULL * 10ULL,
 	    });
 }
+
+void decode_pem_csr() {}

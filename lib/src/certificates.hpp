@@ -6,18 +6,42 @@
 #include <openssl/x509v3.h>
 #include <optional>
 
+/*
+ * Thanks to krzaq for this elegant stateless functor implementation:
+ * https://dev.krzaq.cc/post/you-dont-need-a-stateful-deleter-in-your-unique_ptr-usually/
+ */
+template <auto function>
+struct FunctionDeleter {
+	template <typename... Params>
+	auto operator()(Params&&... params) const {
+		return function(std::forward<Params...>(params...));
+	}
+};
+
+template <typename Type>
+struct OpenSSLDeleter {
+	auto operator()(Type* pointer) const {
+		return OPENSSL_free(pointer);
+	}
+};
+
 using NodeID = std::uint64_t;
-using BN_RAII = std::unique_ptr<BIGNUM, decltype(&::BN_free)>;
-using EVP_PKEY_RAII = std::unique_ptr<EVP_PKEY, decltype(&::EVP_PKEY_free)>;
+using BIO_RAII = std::unique_ptr<BIO, FunctionDeleter<BIO_free>>;
+using BN_RAII = std::unique_ptr<BIGNUM, FunctionDeleter<BN_free>>;
+using EVP_PKEY_RAII = std::unique_ptr<EVP_PKEY, FunctionDeleter<EVP_PKEY_free>>;
 using EVP_PKEY_CTX_RAII =
-    std::unique_ptr<EVP_PKEY_CTX, decltype(&::EVP_PKEY_CTX_free)>;
-using X509_RAII = std::shared_ptr<X509>;
-using X509_REQ_RAII = std::unique_ptr<X509_REQ, decltype(&::X509_REQ_free)>;
-using X509_NAME_RAII = std::unique_ptr<X509_NAME, decltype(&::X509_NAME_free)>;
+    std::unique_ptr<EVP_PKEY_CTX, FunctionDeleter<EVP_PKEY_CTX_free>>;
+using X509_RAII_SHARED = std::shared_ptr<X509>;
+using X509_REQ_RAII = std::unique_ptr<X509_REQ, FunctionDeleter<X509_REQ_free>>;
+using X509_NAME_RAII =
+    std::unique_ptr<X509_NAME, FunctionDeleter<X509_NAME_free>>;
+
+template <typename Type>
+using OPENSSL_RAII = std::unique_ptr<Type, OpenSSLDeleter<Type>>;
 
 struct Certificate {
 	NodeID id;
-	X509_RAII x509;
+	X509_RAII_SHARED x509;
 };
 
 struct CertificateInfo {
@@ -42,6 +66,23 @@ public:
 	static std::shared_ptr<CertificateManager>
 	create_instance(const std::filesystem::path& certificatesFolder);
 	static std::shared_ptr<CertificateManager> get_instance();
+
+	/**
+	 * Decodes a PEM certificate representation.
+	 * @param pem certificate in PEM format
+	 * @return either std::nullopt or std::unique_pointer to the certificate
+	 * structure (never nullptr)
+	 */
+	static std::optional<X509_RAII_SHARED>
+	decode_pem_certificate(std::string_view pem);
+
+	/**
+	 * Decodes a certificate signing request in PEM representation.
+	 * @param pem CSR in PEM format
+	 * @return either std::nullopt or std::unique_pointer to the CSR structure
+	 * (never nullptr)
+	 */
+	static std::optional<X509_REQ_RAII> decode_pem_csr(std::string_view pem);
 
 protected:
 	CertificateManager(std::filesystem::path certificatesFolder);
