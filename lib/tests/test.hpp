@@ -1,4 +1,6 @@
 #pragma once
+#include <fstream>
+#include <cassert>
 
 std::string read_file(const std::string& filename) {
 	std::ifstream file{ filename };

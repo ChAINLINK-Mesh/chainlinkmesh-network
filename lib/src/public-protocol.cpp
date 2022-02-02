@@ -316,7 +316,7 @@ std::strong_ordering
 InitialisationPacket::operator<=>(const InitialisationPacket& other) const {
 	const auto nonCert =
 	    std::make_tuple(this->timestamp, this->referringNode,
-	                    this->timestampPSKSignature, this->timestampPSKHash) <= >
+	                    this->timestampPSKSignature, this->timestampPSKHash) <=>
 	    std::make_tuple(other.timestamp, other.referringNode,
 	                    other.timestampPSKSignature, other.timestampPSKHash);
 
@@ -341,7 +341,7 @@ InitialisationPacket::operator<=>(const InitialisationPacket& other) const {
 	}
 
 	if (thisCSRSize != otherCSRSize) {
-		return thisCSRSize <= > otherCSRSize;
+		return thisCSRSize <=> otherCSRSize;
 	}
 
 	return compare(thisCSRRAII.get(), thisCSRRAII.get() + thisCSRSize,
@@ -349,5 +349,5 @@ InitialisationPacket::operator<=>(const InitialisationPacket& other) const {
 }
 
 bool InitialisationPacket::operator==(const InitialisationPacket& other) const {
-	return (*this <= > other) == std::strong_ordering::equal;
+	return (*this <=> other) == std::strong_ordering::equal;
 }

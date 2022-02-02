@@ -14,7 +14,7 @@
 template <std::input_iterator Iter>
 std::strong_ordering compare(Iter begin1, Iter end1, Iter begin2) {
 	for (; begin1 != end1; begin1++, begin2++) {
-		if (const auto cmp = (*begin1 <= > *begin2); cmp != 0) {
+		if (const auto cmp = (*begin1 <=> *begin2); cmp != 0) {
 			return cmp;
 		}
 	}

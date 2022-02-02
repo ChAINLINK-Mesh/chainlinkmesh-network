@@ -92,28 +92,7 @@ CertificateManager::generate_certificate_request(
 	       std::numeric_limits<int>::max());
 	assert(certificateInfo.validityDuration < std::numeric_limits<int>::max());
 
-	const EVP_PKEY_CTX_RAII rsaCtxParameters{ EVP_PKEY_CTX_new_id(EVP_PKEY_RSA,
-		                                                            nullptr) };
-	// If we failed to initialise the RSA key generator's context.
-	if (!rsaCtxParameters) {
-		return std::nullopt;
-	}
-
-	// Generate RSA key generator
-	if (EVP_PKEY_CTX_set_rsa_keygen_bits(
-	        rsaCtxParameters.get(),
-	        static_cast<int>(certificateInfo.certificateKeyLength)) <= 0) {
-		return std::nullopt;
-	}
-
-	EVP_PKEY* tempKeygenParams = nullptr;
-	if (EVP_PKEY_paramgen(rsaCtxParameters.get(), &tempKeygenParams) != 1) {
-		return std::nullopt;
-	}
-	const EVP_PKEY_RAII rsaKeygenParams{ tempKeygenParams };
-
-	const EVP_PKEY_CTX_RAII rsaCtx{ EVP_PKEY_CTX_new(rsaKeygenParams.get(),
-		                                               nullptr) };
+	const EVP_PKEY_CTX_RAII rsaCtx{ EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, nullptr) };
 
 	// If we failed to generate a valid RSA context.
 	if (!rsaCtx) {
@@ -121,6 +100,12 @@ CertificateManager::generate_certificate_request(
 	}
 
 	if (EVP_PKEY_keygen_init(rsaCtx.get()) != 1) {
+		return std::nullopt;
+	}
+
+	if (EVP_PKEY_CTX_set_rsa_keygen_bits(
+	        rsaCtx.get(),
+	        static_cast<int>(certificateInfo.certificateKeyLength)) <= 0) {
 		return std::nullopt;
 	}
 
@@ -209,7 +194,7 @@ CertificateManager::generate_certificate_request(
 	}
 
 	// Set the sign key of X509 request
-	if (X509_REQ_sign(x509Req.get(), rsaKey.get(), EVP_sha1()) != 1) {
+	if (X509_REQ_sign(x509Req.get(), rsaKey.get(), EVP_sha1()) <= 0) {
 		return std::nullopt;
 	}
 
