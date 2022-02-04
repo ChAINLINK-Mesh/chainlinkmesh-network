@@ -271,4 +271,38 @@ CertificateManager::decode_pem_csr(std::string_view pem) {
 	}
 
 	return certificate;
-};
+}
+
+std::vector<std::string>
+CertificateManager::get_subject_attribute(const X509_NAME* const subject,
+                                          const int nid) {
+	assert(subject != nullptr);
+
+	std::vector<std::string> attributes{};
+
+	int index = -1;
+	for (index = X509_NAME_get_index_by_NID(subject, nid, index); index >= 0;
+	     index = X509_NAME_get_index_by_NID(subject, nid, index)) {
+		const auto* entry = X509_NAME_get_entry(subject, index);
+		const auto* entryASNString = X509_NAME_ENTRY_get_data(entry);
+
+		if (entryASNString == nullptr) {
+			continue;
+		}
+
+		unsigned char* entryCharArray = nullptr;
+		const int entryCharArraySize =
+		    ASN1_STRING_to_UTF8(&entryCharArray, entryASNString);
+		OPENSSL_RAII<unsigned char> entryCharArrayRAII{ entryCharArray };
+
+		if (entryCharArraySize < 0) {
+			continue;
+		}
+
+		attributes.emplace_back(
+		    std::string{ entryCharArrayRAII.get(),
+		                 entryCharArrayRAII.get() + entryCharArraySize });
+	}
+
+	return attributes;
+}

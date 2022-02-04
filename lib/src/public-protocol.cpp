@@ -153,28 +153,14 @@ PublicProtocolManager::decode_packet(BufferType& buffer) const {
 				return std::nullopt;
 			}
 
-			const int cnIndex =
-			    X509_NAME_get_index_by_NID(subjectName, NID_commonName, -1);
+			const auto commonNames = CertificateManager::get_subject_attribute(
+			    subjectName, NID_commonName);
 
-			if (cnIndex < 0) {
+			if (commonNames.size() != 1) {
 				return std::nullopt;
 			}
 
-			const auto* entry = X509_NAME_get_entry(subjectName, cnIndex);
-			const auto* entryASNString = X509_NAME_ENTRY_get_data(entry);
-			unsigned char* entryCharArray = nullptr;
-			const int entryCharArraySize =
-			    ASN1_STRING_to_UTF8(&entryCharArray, entryASNString);
-			OPENSSL_RAII<unsigned char> entryCharArrayRAII{ entryCharArray };
-
-			if (entryCharArraySize < 0) {
-				return std::nullopt;
-			}
-
-			const std::string entryString{
-				entryCharArrayRAII.get(), entryCharArrayRAII.get() + entryCharArraySize
-			};
-			std::clog << "Subject name: " << entryString << "\n";
+			std::clog << "Subject name: " << commonNames[0] << "\n";
 		} else {
 			return std::nullopt;
 		}

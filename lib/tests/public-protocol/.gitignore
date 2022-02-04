@@ -1,2 +1,5 @@
 /*.data
 /*.sha256
+/*.csr
+/invalid-ca-key.pem
+/legitimate-ca-pubkey.pem

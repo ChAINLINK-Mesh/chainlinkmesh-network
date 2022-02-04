@@ -5,6 +5,7 @@
 #include <map>
 #include <openssl/x509v3.h>
 #include <optional>
+#include <vector>
 
 /*
  * Thanks to krzaq for this elegant stateless functor implementation:
@@ -83,6 +84,18 @@ public:
 	 * (never nullptr)
 	 */
 	static std::optional<X509_REQ_RAII> decode_pem_csr(std::string_view pem);
+
+	/**
+	 * Retrieves a list of values specified for a given subject attribute Numeric
+	 * ID.
+	 *
+	 * @param subject the OpenSSL subject name. Doesn't take an owning copy of the
+	 * data.
+	 * @param nid the subject attribute Numeric ID
+	 * @return a list of all values specified for this attribute
+	 */
+	static std::vector<std::string> get_subject_attribute(const X509_NAME* subject,
+	                                                      int nid);
 
 protected:
 	CertificateManager(std::filesystem::path certificatesFolder);

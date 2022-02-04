@@ -38,20 +38,39 @@ void generate_certificate_request() {
 }
 
 void decode_pem_csr() {
-	const auto invalidPemFile = read_file("private-key.key");
-	const auto invalidPemCSR = CertificateManager::decode_pem_csr(invalidPemFile);
+	const auto invalidCSRFile = read_file("private-key.key");
 
-	if (invalidPemCSR) {
-		throw "Decoded invalid PEM CSR (this is an error)";
+	if (const auto invalidCSR = CertificateManager::decode_pem_csr(invalidCSRFile)) {
+		throw "Decoded invalid CSR (this is an error)";
 	}
 
-	// TODO: Include an invalidly-PEM-formatted file.
-	// Above is just a PEM-formatted file which is not a CSR.
+	const auto invalidPEMFile = read_file("invalid-csr.data");
+
+	if (const auto invalidPEM = CertificateManager::decode_pem_csr(invalidPEMFile)) {
+		throw "Decoded invalid PEM file as CSR (this is an error)";
+	}
+
+	const auto *const empty = "";
+
+	if (const auto emptyPEM = CertificateManager::decode_pem_csr(empty)) {
+		throw "Decoded empty file as CSR (this is an error)";
+	}
 
 	const auto pemFile = read_file("x509-csr.pem");
-	const auto pemCSR = CertificateManager::decode_pem_csr(pemFile);
+	const auto optPEMCSR = CertificateManager::decode_pem_csr(pemFile);
 
-	if (!pemCSR) {
+	if (!optPEMCSR) {
 		throw "Failed to decode valid PEM CSR";
+	}
+
+	auto *const csrSubject = X509_REQ_get_subject_name(optPEMCSR.value().get());
+	const auto commonNames = CertificateManager::get_subject_attribute(csrSubject, NID_commonName);
+
+	if (commonNames.size() != 1) {
+		throw "Wrong number of common names decoded from CSR";
+	}
+
+	if (commonNames[0] != "Common Name") {
+		throw "Invalid common name decoded from CSR";
 	}
 }
