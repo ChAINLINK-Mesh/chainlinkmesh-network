@@ -17,6 +17,7 @@ set(HEADER_FILES
 set(SOURCE_FILES
         certificates.cpp
         public-protocol.cpp
+        utilities.cpp
         )
 
 list(TRANSFORM HEADER_FILES PREPEND "${SRC_DIRECTORY}/")

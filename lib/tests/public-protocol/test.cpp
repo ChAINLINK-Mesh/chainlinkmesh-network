@@ -108,11 +108,18 @@ InitialisationPacket get_legitimate_packet() {
 }
 
 PublicProtocolManager get_testing_protocol_manager() {
+	const auto wireguardPubkeyFile = trim(read_file("wireguard-pubkey.key"));
+	const auto wireguardPubkeyBytes = base64_decode(wireguardPubkeyFile);
+	assert(wireguardPubkeyBytes.has_value());
+	Node::WireGuardPublicKey wireguardPubkey{};
+	std::copy(wireguardPubkeyFile.begin(), wireguardPubkeyFile.end(), wireguardPubkey.begin());
+
 	PublicProtocolManager protocolManager{
 		"TestingKey",
 		Node{
 		    .id = 987654321ULL,
-		    .publicKey = read_file("legitimate-ca-pubkey.pem"),
+		    .controlPlanePublicKey = wireguardPubkey,
+		    .meshPublicKey = read_file("legitimate-ca-pubkey.pem"),
 		    .meshIP = Poco::Net::IPAddress{ "10.0.0.1" },
 		    .wireguardIP = Poco::Net::IPAddress{ "127.0.0.1" },
 		    .controlPlanePort = Node::DEFAULT_CONTROL_PLANE_PORT,

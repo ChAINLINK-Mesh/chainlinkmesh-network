@@ -1,4 +1,4 @@
-TARGETS = legitimate-ca-pubkey.pem legitimate-packet.data legitimate-psk.data legitimate-psk.sha256 legitimate-psk-signature.sha256 invalid-psk.data invalid-psk-packet.data invalid-psk-signature.sha256 invalid-psk-signature-packet.data invalid-ca-key.pem unknown-referring-node.data legitimate-csr.csr
+TARGETS = legitimate-ca-pubkey.pem legitimate-packet.data legitimate-psk.data legitimate-psk.sha256 legitimate-psk-signature.sha256 invalid-psk.data invalid-psk-packet.data invalid-psk-signature.sha256 invalid-psk-signature-packet.data invalid-ca-key.pem unknown-referring-node.data legitimate-csr.csr wireguard-privkey.key wireguard-pubkey.key
 
 all: $(TARGETS)
 
@@ -43,3 +43,9 @@ unknown-referring-node.data: unknown-referring-node.protodata legitimate-psk.sha
 
 legitimate-csr.csr: legitimate-csr-key.pem
 	openssl req -new -nodes -key legitimate-csr-key.pem -out legitimate-csr.csr -subj "/C=UK/ST=Test State/L=Test City/O=Test Organisation/OU=Test Organisational Unit/CN=Test Common Name"
+
+wireguard-privkey.key:
+	wg genkey > $@
+
+wireguard-pubkey.key: wireguard-privkey.key
+	wg pubkey < $< > $@

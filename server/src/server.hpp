@@ -7,11 +7,11 @@ public:
 	/**
 	 * @brief Construct a new Server instance.
 	 *
-	 * @param publicPort the controlPlanePort to listen on for public-protocol
-	 *                   communications. A value of 0 implies the default controlPlanePort
+	 * @param publicPort the control-plane port to listen on for public-protocol
+	 *                   communications. A value of 0 implies the default port
 	 *                   should be used.
-	 * @param privatePort the controlPlanePort to listen on for private-protocol
-	 *                    communications. A value of 0 implies the default controlPlanePort
+	 * @param privatePort the control-plane port to listen on for private-protocol
+	 *                    communications. A value of 0 implies the default port
 	 *                    should be used.
 	 */
 	Server(std::uint16_t publicPort = 0U, std::uint16_t privatePort = 0U);
@@ -26,7 +26,8 @@ protected:
 	PublicProtocol::PublicProtocolManager publicProtoManager;
 
 	/**
-	 * @brief Dynamically allocates TCP server parameters for the public controlPlanePort.
+	 * @brief Dynamically allocates TCP server parameters for the public
+	 * control-plane server.
 	 *
 	 * @return Poco::Net::TCPServerParams::Ptr TCP server parameters
 	 */

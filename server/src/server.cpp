@@ -1,6 +1,6 @@
 #include "server.hpp"
 
-// Assign default controlPlanePort values if custom ports are not specified.
+// Assign default port numbers if custom ports are not specified.
 Server::Server(std::uint16_t publicPort, std::uint16_t privatePort)
     : publicPort{ Server::default_port(publicPort, DEFAULT_PUBLIC_PORT) },
       privatePort{ Server::default_port(privatePort, DEFAULT_PRIVATE_PORT) },
@@ -33,7 +33,11 @@ Node Server::get_self() {
 	// TODO: replace with actual implementation
 	return Node{
 		.id = 987654321,
-		.publicKey = "",
+		.controlPlanePublicKey = {},
+		.meshPublicKey = "",
 		.meshIP = Poco::Net::IPAddress{ "127.0.0.1" },
+		.wireguardIP = Poco::Net::IPAddress{ "127.0.0.1" },
+		.controlPlanePort = Node::DEFAULT_CONTROL_PLANE_PORT,
+		.wireguardPort = Node::DEFAULT_WIREGUARD_PORT,
 	};
 }

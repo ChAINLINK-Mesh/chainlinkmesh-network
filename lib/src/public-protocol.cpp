@@ -1,23 +1,12 @@
 #include "public-protocol.hpp"
-#include "utilities.hpp"
 #include <Poco/ByteOrder.h>
 #include <cassert>
 #include <iostream>
-#include <limits>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <utility>
 
 using namespace PublicProtocol;
-
-template <std::integral IntType>
-constexpr IntType base64_decoded_character_count(const IntType bytes) noexcept {
-	const constexpr IntType b64GroupAlignment = 3;
-	const constexpr IntType b64GroupSize = 4;
-	assert(bytes % b64GroupSize == 0);
-
-	return (bytes / b64GroupSize) * b64GroupAlignment;
-}
 
 PublicProtocolManager::PublicProtocolManager(std::string psk, const Node& self)
     : psk{ std::move(psk) }, selfNode{ self } {
@@ -56,8 +45,8 @@ PublicProtocolManager::decode_packet(BufferType& buffer) const {
 
 		// Re-compute timestamp-PSK hash and compare
 		const auto leTimestamp = Poco::ByteOrder::toLittleEndian(packet.timestamp);
-		const std::string timestampPSK =
-		    PublicProtocolManager::byte_string(leTimestamp) + this->psk;
+		const auto timestampPSK = get_bytestring(leTimestamp) +
+		                          ByteString{ this->psk.begin(), this->psk.end() };
 		std::array<std::int8_t, EVP_MAX_MD_SIZE> timestampPSKRehash{};
 		unsigned int rehashSize = 0;
 
@@ -109,10 +98,10 @@ PublicProtocolManager::decode_packet(BufferType& buffer) const {
 
 		// Compare timestamp-PSK signature
 		const auto leTimestamp = Poco::ByteOrder::toLittleEndian(packet.timestamp);
-		const std::string timestampPSK =
-		    PublicProtocolManager::byte_string(leTimestamp) + this->psk;
+		const auto timestampPSK = get_bytestring(leTimestamp) +
+		                          ByteString{ this->psk.begin(), this->psk.end() };
 
-		const auto nodePKey = get_node_pkey(*referringNode);
+		const auto nodePKey = get_node_pkey(*referringNode).value();
 		std::unique_ptr<EVP_MD_CTX, decltype(&::EVP_MD_CTX_free)> digestCtx{
 			EVP_MD_CTX_new(), &::EVP_MD_CTX_free
 		};
@@ -122,7 +111,7 @@ PublicProtocolManager::decode_packet(BufferType& buffer) const {
 		}
 
 		if (EVP_DigestVerifyInit(digestCtx.get(), nullptr, EVP_sha256(), nullptr,
-		                         nodePKey->get()) != 1) {
+		                         nodePKey.get()) != 1) {
 			return std::nullopt;
 		}
 
@@ -176,38 +165,6 @@ PublicProtocolManager::decode_packet(std::span<const char> buffer) {
 	return decode_packet(fifoBuffer);
 }
 
-template <std::integral Integral>
-std::string PublicProtocolManager::byte_string(Integral value) {
-	union {
-		Integral baseType;
-		char bytes[sizeof(Integral)]; // NOLINT(modernize-avoid-c-arrays)
-	} aliasing = {
-		.baseType = value,
-	};
-
-	return std::string{ aliasing.bytes, aliasing.bytes + sizeof(Integral) };
-}
-
-std::optional<std::vector<std::uint8_t>>
-PublicProtocolManager::base64_decode(std::span<char> bytes) {
-	assert(bytes.size() < std::numeric_limits<int>::max());
-	assert(!bytes.empty());
-
-	const std::integral auto expectedDecodedByteCount =
-	    base64_decoded_character_count(bytes.size());
-	std::vector<std::uint8_t> decoded(expectedDecodedByteCount, '\0');
-	const decltype(expectedDecodedByteCount) decodedByteCount =
-	    EVP_DecodeBlock(reinterpret_cast<unsigned char*>(decoded.data()),
-	                    reinterpret_cast<unsigned char*>(bytes.data()),
-	                    static_cast<int>(bytes.size()));
-
-	if (decodedByteCount != expectedDecodedByteCount) {
-		return std::nullopt;
-	}
-
-	return decoded;
-}
-
 bool PublicProtocolManager::add_node(const Node& node) {
 	std::lock_guard<std::mutex> nodesLock{ nodesMutex };
 	return this->nodes.insert(std::make_pair(node.id, node)).second;
@@ -238,11 +195,13 @@ PublicProtocolManager::PublicProtocolManager(const PublicProtocolManager& other)
 
 std::optional<EVP_PKEY_RAII>
 PublicProtocolManager::get_node_pkey(const Node& node) {
-	assert(node.publicKey.size() < std::numeric_limits<int>::max());
-	const auto* data = reinterpret_cast<const uint8_t*>(node.publicKey.data());
+	assert(node.controlPlanePublicKey.size() < std::numeric_limits<int>::max());
+	const auto* data =
+	    reinterpret_cast<const uint8_t*>(node.meshPublicKey.data());
 
 	std::unique_ptr<BIO, decltype(&::BIO_free)> dataBuf{
-		BIO_new_mem_buf(data, static_cast<int>(node.publicKey.size())), &::BIO_free
+		BIO_new_mem_buf(data, static_cast<int>(node.meshPublicKey.size())),
+		&::BIO_free
 	};
 	EVP_PKEY* tmpPKey =
 	    PEM_read_bio_PUBKEY(dataBuf.get(), nullptr, nullptr, nullptr);
@@ -255,13 +214,17 @@ PublicProtocolManager::get_node_pkey(const Node& node) {
 }
 
 std::optional<InitialisationRespPacket>
-PublicProtocolManager::create_response(InitialisationPacket&& packet) {
+PublicProtocolManager::create_response(InitialisationPacket packet) {
 	// TODO: Complete.
 	return InitialisationRespPacket{
+		.respondingNode = this->selfNode.id,
+		.allocatedNode = /* TODO: Generate a node ID */ 0,
+		.respondingPublicKey = this->selfNode.controlPlanePublicKey,
+		.respondingMeshIPAddress = this->selfNode.meshIP,
+		.respondingWireguardIPAddress = this->selfNode.wireguardIP,
+		.respondingControlPlanePort = this->selfNode.controlPlanePort,
+		.respondingWireguardPort = this->selfNode.wireguardPort,
 		.signedCSR = std::move(packet.csr),
-		.publicKey = this->selfNode.publicKey,
-		.ipAddress = this->selfNode.meshIP,
-		.port = this->selfNode.controlPlanePort,
 	};
 }
 
@@ -293,18 +256,31 @@ void PublicConnection::run() {
 		return;
 	}
 
-	if (const auto packet = parent.decode_packet(buffer)) {
-		// TODO: Respond with necessary data.
+	if (auto packet = parent.decode_packet(buffer)) {
+		const auto responsePacket =
+		    parent.create_response(std::move(packet.value()));
+
+		if (responsePacket) {
+			const auto responsePacketBytes = responsePacket->get_bytes();
+			assert(responsePacketBytes.size() < std::numeric_limits<int>::max());
+
+			if (socket().sendBytes(responsePacketBytes.data(),
+			                       static_cast<int>(responsePacketBytes.size())) <
+			    0) {
+				std::cerr << "Failed to send response to peer: " << strerror(errno)
+				          << "\n";
+			}
+		}
 	}
 }
 
 std::strong_ordering
 InitialisationPacket::operator<=>(const InitialisationPacket& other) const {
 	const auto nonCert =
-	    std::make_tuple(this->timestamp, this->referringNode,
-	                    this->timestampPSKSignature, this->timestampPSKHash) <=>
-	    std::make_tuple(other.timestamp, other.referringNode,
-	                    other.timestampPSKSignature, other.timestampPSKHash);
+	    std::tie(this->timestamp, this->referringNode,
+	             this->timestampPSKSignature, this->timestampPSKHash) <=>
+	    std::tie(other.timestamp, other.referringNode,
+	             other.timestampPSKSignature, other.timestampPSKHash);
 
 	if (nonCert != std::strong_ordering::equal) {
 		return nonCert;
@@ -336,4 +312,23 @@ InitialisationPacket::operator<=>(const InitialisationPacket& other) const {
 
 bool InitialisationPacket::operator==(const InitialisationPacket& other) const {
 	return (*this <=> other) == std::strong_ordering::equal;
+}
+
+ByteString InitialisationRespPacket::get_bytes() const {
+	const auto respondingNodeLE =
+	    Poco::ByteOrder::fromLittleEndian(this->respondingNode);
+	const auto allocatedNodeLE =
+	    Poco::ByteOrder::fromLittleEndian(this->allocatedNode);
+	const auto respondingControlPlanePortLE =
+	    Poco::ByteOrder::fromLittleEndian(this->respondingControlPlanePort);
+	const auto respondingWireguardPortLE =
+	    Poco::ByteOrder::fromLittleEndian(this->respondingWireguardPort);
+
+	// TODO: Add CSR
+	ByteString bytes = get_bytestring(
+	    respondingNodeLE, allocatedNodeLE, this->respondingPublicKey,
+	    this->respondingMeshIPAddress, this->respondingWireguardIPAddress,
+	    respondingControlPlanePortLE, respondingWireguardPortLE);
+
+	return bytes;
 }

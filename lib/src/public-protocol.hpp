@@ -1,6 +1,7 @@
 #pragma once
 #include "certificates.hpp"
 #include "node.hpp"
+#include "utilities.hpp"
 #include <Poco/Net/TCPServer.h>
 #include <concepts>
 #include <map>
@@ -14,18 +15,6 @@ namespace PublicProtocol {
 
 	using BufferType = Poco::FIFOBuffer;
 
-	template <std::integral IntType>
-	constexpr IntType base64_encoded_character_count(IntType bytes) noexcept {
-		const constexpr IntType b64GroupAlignment = 3;
-		const constexpr IntType b64GroupSize = 4;
-
-		// Round up to nearest B64_ALIGNMENT bytes
-		const IntType b64Groups =
-		    (bytes + b64GroupAlignment - 1) / b64GroupAlignment;
-
-		return b64GroupSize * b64Groups;
-	}
-
 	/**
 	 * Initialisation packet. The first packet sent by a potential client to a
 	 * node capable of authorising connections.
@@ -38,6 +27,8 @@ namespace PublicProtocol {
 		Hash timestampPSKHash;
 		std::uint64_t referringNode;
 		Signature timestampPSKSignature;
+		// TODO: Require UNSTRUCTUREDNAME to be the node's ID
+		// TODO: Require UNSTRUCTUREDADDRESS to be the node's WireGuard public key
 		X509_REQ_RAII csr;
 
 		std::strong_ordering operator<=>(const InitialisationPacket& other) const;
@@ -48,10 +39,16 @@ namespace PublicProtocol {
 	struct InitialisationRespPacket {
 		using WireGuardPublicKey = Node::WireGuardPublicKey;
 
+		std::uint64_t respondingNode;
+		std::uint64_t allocatedNode;
+		WireGuardPublicKey respondingPublicKey;
+		Poco::Net::IPAddress respondingMeshIPAddress;
+		Poco::Net::IPAddress respondingWireguardIPAddress;
+		std::uint16_t respondingControlPlanePort;
+		std::uint16_t respondingWireguardPort;
 		X509_REQ_RAII signedCSR;
-		WireGuardPublicKey publicKey;
-		Poco::Net::IPAddress ipAddress;
-		std::uint16_t port;
+
+		[[nodiscard]] ByteString get_bytes() const;
 	};
 
 	class PublicConnection;
@@ -69,7 +66,7 @@ namespace PublicProtocol {
 		decode_packet(std::span<const char> buffer);
 
 		std::optional<InitialisationRespPacket>
-		create_response(InitialisationPacket&& packet);
+		create_response(InitialisationPacket packet);
 
 		bool add_node(const Node& node);
 		std::optional<Node> get_node(std::uint64_t nodeID) const;
@@ -96,12 +93,6 @@ namespace PublicProtocol {
 		    MIN_PACKET_BUFFER_SIZE + MAX_CSR_SIZE;
 
 		static std::optional<EVP_PKEY_RAII> get_node_pkey(const Node& node);
-
-		template <std::integral Integral>
-		static std::string byte_string(Integral value);
-
-		static std::optional<std::vector<std::uint8_t>>
-		base64_decode(std::span<char> bytes);
 
 		class ConnectionFactory : public Poco::Net::TCPServerConnectionFactory {
 		public:

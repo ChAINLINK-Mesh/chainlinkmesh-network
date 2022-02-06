@@ -17,9 +17,6 @@ int main(int argc, char* argv[]) {
 	} catch (const std::string& error) {
 		std::clog << "Failure: " << error << "\n";
 		throw;
-	} catch (...) {
-		std::clog << "Failure";
-		throw;
 	}
 
 	std::clog << "\n";

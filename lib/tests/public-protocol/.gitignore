@@ -3,3 +3,5 @@
 /*.csr
 /invalid-ca-key.pem
 /legitimate-ca-pubkey.pem
+/wireguard-privkey.key
+/wireguard-pubkey.key

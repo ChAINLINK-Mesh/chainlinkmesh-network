@@ -3,10 +3,12 @@
 #include <string>
 
 struct Node {
-	using WireGuardPublicKey = std::string;
+	static const constexpr std::uint32_t WG_PUBKEY_SIZE = 32;
+	using WireGuardPublicKey = std::array<std::uint8_t, WG_PUBKEY_SIZE>;
 
 	std::uint64_t id;
-	WireGuardPublicKey publicKey;
+	WireGuardPublicKey controlPlanePublicKey;
+	std::string meshPublicKey;
 	Poco::Net::IPAddress meshIP, wireguardIP;
 	std::uint16_t controlPlanePort, wireguardPort;
 
