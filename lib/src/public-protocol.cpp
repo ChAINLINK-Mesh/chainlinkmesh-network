@@ -324,11 +324,11 @@ ByteString InitialisationRespPacket::get_bytes() const {
 	const auto respondingWireguardPortLE =
 	    Poco::ByteOrder::fromLittleEndian(this->respondingWireguardPort);
 
-	// TODO: Add CSR
 	ByteString bytes = get_bytestring(
 	    respondingNodeLE, allocatedNodeLE, this->respondingPublicKey,
 	    this->respondingMeshIPAddress, this->respondingWireguardIPAddress,
-	    respondingControlPlanePortLE, respondingWireguardPortLE);
+	    respondingControlPlanePortLE, respondingWireguardPortLE,
+	    CertificateManager::encode_pem(this->signedCSR));
 
 	return bytes;
 }

@@ -112,7 +112,8 @@ PublicProtocolManager get_testing_protocol_manager() {
 	const auto wireguardPubkeyBytes = base64_decode(wireguardPubkeyFile);
 	assert(wireguardPubkeyBytes.has_value());
 	Node::WireGuardPublicKey wireguardPubkey{};
-	std::copy(wireguardPubkeyFile.begin(), wireguardPubkeyFile.end(), wireguardPubkey.begin());
+	std::copy(wireguardPubkeyFile.begin(), wireguardPubkeyFile.end(),
+	          wireguardPubkey.begin());
 
 	PublicProtocolManager protocolManager{
 		"TestingKey",

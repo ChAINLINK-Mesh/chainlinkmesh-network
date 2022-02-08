@@ -38,7 +38,8 @@ std::optional<ByteString> base64_decode(std::string_view bytes) {
 	    reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size() });
 }
 
-std::optional<ByteString> base64_decode(const std::span<const std::uint8_t> bytes) {
+std::optional<ByteString>
+base64_decode(const std::span<const std::uint8_t> bytes) {
 	assert(bytes.size() < std::numeric_limits<int>::max());
 	assert(!bytes.empty());
 

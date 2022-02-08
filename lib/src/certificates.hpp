@@ -94,8 +94,24 @@ public:
 	 * @param nid the subject attribute Numeric ID
 	 * @return a list of all values specified for this attribute
 	 */
-	static std::vector<std::string> get_subject_attribute(const X509_NAME* subject,
-	                                                      int nid);
+	static std::vector<std::string>
+	get_subject_attribute(const X509_NAME* subject, int nid);
+
+	/**
+	 * Encodes an X509 certificate to PEM format.
+	 *
+	 * @param x509 the X509 certificate to encode
+	 * @return the PEM encoding of the given X509 certificate
+	 */
+	static std::string encode_pem(const X509_RAII_SHARED& x509);
+
+	/**
+	 * Encodes an X509 CSR to PEM format.
+	 *
+	 * @param x509 the X509 CSR to encode
+	 * @return the PEM encoding of the given X509 CSR
+	 */
+	static std::string encode_pem(const X509_REQ_RAII& x509Req);
 
 protected:
 	CertificateManager(std::filesystem::path certificatesFolder);
@@ -107,3 +123,5 @@ protected:
 
 	static std::shared_ptr<CertificateManager> instance;
 };
+
+bool operator==(const X509_REQ& a, const X509_REQ& b);

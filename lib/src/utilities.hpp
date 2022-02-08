@@ -1,13 +1,13 @@
 #pragma once
-#include <algorithm>
-#include <array>
-#include <string>
-#include <iterator>
 #include <Poco/ByteOrder.h>
 #include <Poco/Net/IPAddress.h>
+#include <algorithm>
+#include <array>
+#include <iterator>
 #include <numeric>
 #include <optional>
 #include <span>
+#include <string>
 
 /**
  * Compares ranges [begin1..end1) to [begin2..)
@@ -38,10 +38,11 @@ using ByteString = std::basic_string<std::uint8_t>;
  * @param value the integral value
  * @return the bytestring representing the value
  */
-template<std::integral Type>
+template <std::integral Type>
 ByteString get_bytestring(const Type value) noexcept {
 	const Type littleEndian = Poco::ByteOrder::toLittleEndian(value);
-	return ByteString{ reinterpret_cast<const std::uint8_t*>(&littleEndian), sizeof(littleEndian) };
+	return ByteString{ reinterpret_cast<const std::uint8_t*>(&littleEndian),
+		                 sizeof(littleEndian) };
 }
 
 /**
@@ -74,8 +75,7 @@ constexpr IntType base64_encoded_character_count(IntType bytes) noexcept {
 	const constexpr IntType b64GroupSize = 4;
 
 	// Round up to nearest B64_ALIGNMENT bytes
-	const IntType b64Groups =
-			(bytes + b64GroupAlignment - 1) / b64GroupAlignment;
+	const IntType b64Groups = (bytes + b64GroupAlignment - 1) / b64GroupAlignment;
 
 	return b64GroupSize * b64Groups;
 }

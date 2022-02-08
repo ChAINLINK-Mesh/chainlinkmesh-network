@@ -1,7 +1,9 @@
 #include "certificates.hpp"
 #include "scope-exit.hpp"
 #include <cassert>
+#include <cstring>
 #include <fstream>
+#include <openssl/bio.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/x509.h>
@@ -9,9 +11,8 @@
 
 std::shared_ptr<CertificateManager> CertificateManager::instance = nullptr;
 
-CertificateManager::CertificateManager(
-    const std::filesystem::path certificatesFolder)
-    : certificatesFolder{ certificatesFolder } {}
+CertificateManager::CertificateManager(std::filesystem::path certificatesFolder)
+    : certificatesFolder{ std::move(certificatesFolder) } {}
 
 std::filesystem::path
 CertificateManager::get_certificate_path(NodeID nodeID) const {
@@ -305,4 +306,68 @@ CertificateManager::get_subject_attribute(const X509_NAME* const subject,
 	}
 
 	return attributes;
+}
+
+std::string CertificateManager::encode_pem(const X509_RAII_SHARED& x509) {
+	BIO_RAII bio{ BIO_new(BIO_s_mem()) };
+
+	if (PEM_write_bio_X509(bio.get(), x509.get()) == 0) {
+		throw std::invalid_argument{ "PEM encoding failure" };
+	};
+
+	char* data = nullptr;
+	const auto pemSize = BIO_get_mem_data(bio.get(), &data);
+
+	if (pemSize <= 0) {
+		throw std::invalid_argument{ "PEM buffer read error" };
+	}
+
+	return std::string{ data, data + pemSize };
+}
+
+std::string CertificateManager::encode_pem(const X509_REQ_RAII& x509Req) {
+	BIO_RAII bio{ BIO_new(BIO_s_mem()) };
+
+	if (PEM_write_bio_X509_REQ(bio.get(), x509Req.get()) == 0) {
+		throw std::invalid_argument{ "PEM encoding failure" };
+	};
+
+	char* data = nullptr;
+	const auto pemSize = BIO_get_mem_data(bio.get(), &data);
+
+	if (pemSize <= 0) {
+		throw std::invalid_argument{ "PEM buffer read error" };
+	}
+
+	return std::string{ data, data + pemSize };
+}
+
+bool operator==(const X509_REQ& a, const X509_REQ& b) {
+	BIO_RAII bio1{ BIO_new(BIO_s_mem()) };
+	BIO_RAII bio2{ BIO_new(BIO_s_mem()) };
+
+	if (!bio1 || !bio2) {
+		return false;
+	}
+
+	if (PEM_write_bio_X509_REQ(bio1.get(), &a) == 0) {
+		// Unable to write PEM form, so mark as inequal.
+		return false;
+	}
+
+	if (PEM_write_bio_X509_REQ(bio2.get(), &b) == 0) {
+		// Unable to write PEM form, so mark as inequal.
+		return false;
+	}
+
+	char* data1 = nullptr;
+	const auto bio1Size = BIO_get_mem_data(bio1.get(), &data1);
+	char* data2 = nullptr;
+	const auto bio2Size = BIO_get_mem_data(bio2.get(), &data2);
+
+	if (bio1Size != bio2Size) {
+		return false;
+	}
+
+	return memcmp(data1, data2, bio1Size) == 0;
 }
