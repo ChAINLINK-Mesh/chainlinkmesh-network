@@ -1,6 +1,8 @@
 #include "public-protocol.hpp"
 #include <Poco/ByteOrder.h>
+#include <Poco/Net/TCPServer.h>
 #include <cassert>
+#include <ios>
 #include <iostream>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
@@ -13,11 +15,14 @@ PublicProtocolManager::PublicProtocolManager(std::string psk, const Node& self)
 	this->nodes.insert(std::make_pair(self.id, self));
 }
 
-void PublicProtocolManager::start(const Poco::Net::ServerSocket& serverSocket,
-                                  Poco::Net::TCPServerParams::Ptr params) {
-	Poco::Net::TCPServer server{ new ConnectionFactory(*this), serverSocket,
-		                           std::move(params) };
-	server.start();
+std::unique_ptr<Poco::Net::TCPServer>
+PublicProtocolManager::start(const Poco::Net::ServerSocket& serverSocket,
+                             Poco::Net::TCPServerParams::Ptr params) {
+	auto server = std::make_unique<Poco::Net::TCPServer>(
+	    new ConnectionFactory(*this), serverSocket, std::move(params));
+	server->start();
+
+	return server;
 }
 
 std::optional<InitialisationPacket>
@@ -44,8 +49,7 @@ PublicProtocolManager::decode_packet(BufferType& buffer) const {
 		}
 
 		// Re-compute timestamp-PSK hash and compare
-		const auto leTimestamp = Poco::ByteOrder::toLittleEndian(packet.timestamp);
-		const auto timestampPSK = get_bytestring(leTimestamp) +
+		const auto timestampPSK = get_bytestring(packet.timestamp) +
 		                          ByteString{ this->psk.begin(), this->psk.end() };
 		std::array<std::int8_t, EVP_MAX_MD_SIZE> timestampPSKRehash{};
 		unsigned int rehashSize = 0;
@@ -97,11 +101,16 @@ PublicProtocolManager::decode_packet(BufferType& buffer) const {
 		}
 
 		// Compare timestamp-PSK signature
-		const auto leTimestamp = Poco::ByteOrder::toLittleEndian(packet.timestamp);
-		const auto timestampPSK = get_bytestring(leTimestamp) +
+		const auto timestampPSK = get_bytestring(packet.timestamp) +
 		                          ByteString{ this->psk.begin(), this->psk.end() };
 
-		const auto nodePKey = get_node_pkey(*referringNode).value();
+		const auto optNodePKey = get_node_pkey(referringNode.value());
+
+		if (!optNodePKey) {
+			return std::nullopt;
+		}
+
+		const auto& nodePKey = optNodePKey.value();
 		std::unique_ptr<EVP_MD_CTX, decltype(&::EVP_MD_CTX_free)> digestCtx{
 			EVP_MD_CTX_new(), &::EVP_MD_CTX_free
 		};
@@ -197,10 +206,10 @@ std::optional<EVP_PKEY_RAII>
 PublicProtocolManager::get_node_pkey(const Node& node) {
 	assert(node.controlPlanePublicKey.size() < std::numeric_limits<int>::max());
 	const auto* data =
-	    reinterpret_cast<const uint8_t*>(node.meshPublicKey.data());
+	    reinterpret_cast<const uint8_t*>(node.controlPlanePublicKey.data());
 
 	std::unique_ptr<BIO, decltype(&::BIO_free)> dataBuf{
-		BIO_new_mem_buf(data, static_cast<int>(node.meshPublicKey.size())),
+		BIO_new_mem_buf(data, static_cast<int>(node.controlPlanePublicKey.size())),
 		&::BIO_free
 	};
 	EVP_PKEY* tmpPKey =
@@ -219,11 +228,11 @@ PublicProtocolManager::create_response(InitialisationPacket packet) {
 	return InitialisationRespPacket{
 		.respondingNode = this->selfNode.id,
 		.allocatedNode = /* TODO: Generate a node ID */ 0,
-		.respondingPublicKey = this->selfNode.controlPlanePublicKey,
-		.respondingMeshIPAddress = this->selfNode.meshIP,
-		.respondingWireguardIPAddress = this->selfNode.wireguardIP,
+		.respondingWireGuardPublicKey = this->selfNode.wireGuardPublicKey,
+		.respondingControlPlaneIPAddress = this->selfNode.controlPlaneIP,
+		.respondingWireguardIPAddress = this->selfNode.wireGuardIP,
 		.respondingControlPlanePort = this->selfNode.controlPlanePort,
-		.respondingWireguardPort = this->selfNode.wireguardPort,
+		.respondingWireguardPort = this->selfNode.wireGuardPort,
 		.signedCSR = std::move(packet.csr),
 	};
 }
@@ -247,8 +256,6 @@ PublicConnection::PublicConnection(const Poco::Net::StreamSocket& socket,
 }
 
 void PublicConnection::run() {
-	std::cout << "New connection from: "
-	          << socket().peerAddress().host().toString() << "\n";
 	BufferType buffer{ PublicProtocolManager::INIT_PACKET_BUFFER_SIZE };
 
 	if (socket().receiveBytes(buffer) <
@@ -271,6 +278,9 @@ void PublicConnection::run() {
 				          << "\n";
 			}
 		}
+	} else {
+		std::clog << "Invalid connection request from: "
+		          << socket().peerAddress().host().toString() << "\n";
 	}
 }
 
@@ -325,8 +335,8 @@ ByteString InitialisationRespPacket::get_bytes() const {
 	    Poco::ByteOrder::fromLittleEndian(this->respondingWireguardPort);
 
 	ByteString bytes = get_bytestring(
-	    respondingNodeLE, allocatedNodeLE, this->respondingPublicKey,
-	    this->respondingMeshIPAddress, this->respondingWireguardIPAddress,
+	    respondingNodeLE, allocatedNodeLE, this->respondingWireGuardPublicKey,
+	    this->respondingControlPlaneIPAddress, this->respondingWireguardIPAddress,
 	    respondingControlPlanePortLE, respondingWireguardPortLE,
 	    CertificateManager::encode_pem(this->signedCSR));
 

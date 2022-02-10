@@ -7,11 +7,10 @@ struct Node {
 	using WireGuardPublicKey = std::array<std::uint8_t, WG_PUBKEY_SIZE>;
 
 	std::uint64_t id;
-	WireGuardPublicKey controlPlanePublicKey;
-	std::string meshPublicKey;
-	Poco::Net::IPAddress meshIP, wireguardIP;
-	std::uint16_t controlPlanePort, wireguardPort;
+	std::string controlPlanePublicKey;
+	WireGuardPublicKey wireGuardPublicKey;
+	Poco::Net::IPAddress controlPlaneIP, wireGuardIP;
+	std::uint16_t controlPlanePort, wireGuardPort;
 
-	const static std::uint16_t DEFAULT_CONTROL_PLANE_PORT = 272;
-	const static std::uint16_t DEFAULT_WIREGUARD_PORT = 273;
+	const static std::uint16_t DEFAULT_WIREGUARD_PORT = 274;
 };

@@ -10,6 +10,7 @@
 #include <span>
 
 namespace PublicProtocol {
+	const constexpr std::uint16_t DEFAULT_CONTROL_PLANE_PORT = 272;
 	const constexpr std::uint16_t SHA256_DIGEST_SIZE = 32;
 	const constexpr std::uint16_t SHA256_SIGNATURE_SIZE = 256;
 
@@ -41,8 +42,8 @@ namespace PublicProtocol {
 
 		std::uint64_t respondingNode;
 		std::uint64_t allocatedNode;
-		WireGuardPublicKey respondingPublicKey;
-		Poco::Net::IPAddress respondingMeshIPAddress;
+		WireGuardPublicKey respondingWireGuardPublicKey;
+		Poco::Net::IPAddress respondingControlPlaneIPAddress;
 		Poco::Net::IPAddress respondingWireguardIPAddress;
 		std::uint16_t respondingControlPlanePort;
 		std::uint16_t respondingWireguardPort;
@@ -59,8 +60,9 @@ namespace PublicProtocol {
 		PublicProtocolManager(const PublicProtocolManager& other);
 		virtual ~PublicProtocolManager() = default;
 
-		void start(const Poco::Net::ServerSocket& serverSocket,
-		           Poco::Net::TCPServerParams::Ptr params);
+		std::unique_ptr<Poco::Net::TCPServer>
+		start(const Poco::Net::ServerSocket& serverSocket,
+		      Poco::Net::TCPServerParams::Ptr params);
 
 		std::optional<InitialisationPacket>
 		decode_packet(std::span<const char> buffer);

@@ -1,41 +1,99 @@
 #pragma once
+#include <Poco/Net/SocketAddress.h>
+#include <Poco/Net/TCPServer.h>
 #include <cstdint>
+#include <optional>
 #include <public-protocol.hpp>
 
 class Server {
 public:
 	/**
+	 * A structure representing the server configuration.
+	 */
+	struct Configuration {
+		/**
+		 * The server node's ID.
+		 *
+		 * A value of std::nullopt indicates that it should be randomly assigned.
+		 * This is only valid for the root node. Other nodes will have their ID
+		 * values assigned automatically
+		 */
+		std::optional<std::uint64_t> id;
+
+		/**
+		 * The control-plane's certificate public key.
+		 *
+		 * Use to authenticate messages coming from this node.
+		 */
+		std::string controlPlanePublicKey;
+
+		/**
+		 * The data-plane's public key used to encrypt transmissions.
+		 */
+		Node::WireGuardPublicKey meshPublicKey;
+
+		/**
+		 * The data-plane's IP:port pair to listen on for data transmission.
+		 */
+		Poco::Net::SocketAddress wireGuardAddress;
+
+		/**
+		 * The control-plane IP:port to listen on for public-protocol
+		 * communications.
+		 *
+		 * A value of std::nullopt implies the default address should be used.
+		 */
+		std::optional<Poco::Net::SocketAddress> publicProtoAddress;
+
+		/**
+		 * The control-plane IP:port to listen on for private-protocol
+		 * communications.
+		 *
+		 * A value of std::nullopt implies the default address should be used.
+		 */
+		std::optional<Poco::Net::SocketAddress> privateProtoAddress;
+	};
+
+	/**
 	 * @brief Construct a new Server instance.
 	 *
-	 * @param publicPort the control-plane port to listen on for public-protocol
-	 *                   communications. A value of 0 implies the default port
-	 *                   should be used.
-	 * @param privatePort the control-plane port to listen on for private-protocol
-	 *                    communications. A value of 0 implies the default port
-	 *                    should be used.
+	 * @param config the server configuration to start with
 	 */
-	Server(std::uint16_t publicPort = 0U, std::uint16_t privatePort = 0U);
+	explicit Server(const Configuration& config);
 
-	void start();
+	struct ServerExecution {
+		std::unique_ptr<Poco::Net::TCPServer> publicProtoServer;
+		std::unique_ptr<Poco::Net::TCPServer> privateProtoServer;
 
-	const constexpr static std::uint16_t DEFAULT_PUBLIC_PORT = 272U,
-	                                     DEFAULT_PRIVATE_PORT = 273U;
+		void stop() const;
+	};
+
+	ServerExecution start();
+
+	Poco::Net::SocketAddress get_public_proto_address();
+	Poco::Net::SocketAddress get_private_proto_address();
+	Poco::Net::SocketAddress get_wireguard_address();
 
 protected:
-	std::uint16_t publicPort, privatePort;
+	Poco::Net::SocketAddress publicProtoAddress;
+	Poco::Net::SocketAddress privateProtoAddress;
+	Poco::Net::SocketAddress wireGuardAddress;
 	PublicProtocol::PublicProtocolManager publicProtoManager;
 
 	/**
 	 * @brief Dynamically allocates TCP server parameters for the public
-	 * control-plane server.
+	 *        control-plane server.
 	 *
 	 * @return Poco::Net::TCPServerParams::Ptr TCP server parameters
 	 */
 	static Poco::Net::TCPServerParams::Ptr public_tcp_server_params();
-	static std::uint16_t default_port(std::uint16_t port,
-	                                  std::uint16_t fallbackPort);
 
 	static std::string generate_psk();
 
-	Node get_self();
+	static Node get_self(const Configuration& config);
+
+	static Poco::Net::SocketAddress default_public_proto_address(
+	    const Poco::Net::SocketAddress& wireGuardAddress);
+	static Poco::Net::SocketAddress default_private_proto_address(
+	    const Poco::Net::SocketAddress& wireGuardAddress);
 };

@@ -1,16 +1,15 @@
 #pragma once
+
+#include <array>
 #include <cassert>
+#include <filesystem>
 #include <fstream>
+#include <limits>
 
-std::string read_file(const std::string& filename) {
-	std::ifstream file{ filename };
-	const auto fileSize = std::filesystem::file_size(filename);
-	assert(fileSize < std::numeric_limits<long>::max());
+/* Define this method in each testcase. */
+void test();
 
-	std::string fileData(fileSize, '\0');
-	file.read(fileData.data(), static_cast<long>(fileSize));
-	return fileData;
-}
+std::string read_file(const std::string& filename);
 
 template <size_t ReadSize>
 std::array<std::uint8_t, ReadSize> read_file(const std::string& filename) {

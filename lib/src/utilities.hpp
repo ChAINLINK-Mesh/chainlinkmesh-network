@@ -8,6 +8,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <type_traits>
 
 /**
  * Compares ranges [begin1..end1) to [begin2..)
@@ -39,7 +40,7 @@ using ByteString = std::basic_string<std::uint8_t>;
  * @return the bytestring representing the value
  */
 template <std::integral Type>
-ByteString get_bytestring(const Type value) noexcept {
+ByteString get_bytestring(Type value) noexcept {
 	const Type littleEndian = Poco::ByteOrder::toLittleEndian(value);
 	return ByteString{ reinterpret_cast<const std::uint8_t*>(&littleEndian),
 		                 sizeof(littleEndian) };
@@ -52,14 +53,16 @@ ByteString get_bytestring(const Type value) noexcept {
  * @return an independent copy of the bytes represented by this array
  */
 template <size_t count>
-ByteString get_bytestring(const std::array<std::uint8_t, count> value) {
+ByteString get_bytestring(const std::array<std::uint8_t, count>& value) {
 	return ByteString{ value.data(), value.size() };
 }
 
 ByteString get_bytestring(Poco::Net::IPAddress address);
+ByteString get_bytestring(const std::string& string);
 
 template <typename... Types>
-ByteString get_bytestring(const Types... values) {
+ByteString get_bytestring(const Types&... values) requires(sizeof...(Types) >
+                                                           1) {
 	ByteString bytestring{};
 
 	for (const auto value : (get_bytestring(values), ...)) {
@@ -84,6 +87,9 @@ std::optional<ByteString> base64_decode(std::string_view bytes);
 std::optional<ByteString> base64_decode(std::span<const std::uint8_t> bytes);
 
 template <std::integral IntType>
-constexpr IntType base64_decoded_character_count(IntType bytes) noexcept;
+constexpr std::optional<IntType>
+base64_decoded_character_count(IntType bytes) noexcept;
+
+bool is_valid_base64_digit(std::uint8_t byte);
 
 std::string trim(const std::string& string);

@@ -15,3 +15,7 @@ insert_final_newline = false
 
 [*.sha256]
 insert_final_newline = false
+
+[CMakeLists.txt]
+indent_size = 4
+indent_style = space

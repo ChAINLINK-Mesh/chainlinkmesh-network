@@ -33,6 +33,10 @@ ByteString get_bytestring(Poco::Net::IPAddress address) {
 	return littleEndianBytes;
 }
 
+ByteString get_bytestring(const std::string& string) {
+	return ByteString{ string.begin(), string.end() };
+}
+
 std::optional<ByteString> base64_decode(std::string_view bytes) {
 	return base64_decode(std::span<const std::uint8_t>{
 	    reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size() });
@@ -41,26 +45,55 @@ std::optional<ByteString> base64_decode(std::string_view bytes) {
 std::optional<ByteString>
 base64_decode(const std::span<const std::uint8_t> bytes) {
 	assert(bytes.size() < std::numeric_limits<int>::max());
-	assert(!bytes.empty());
 
-	const std::integral auto expectedDecodedByteCount =
-	    base64_decoded_character_count(bytes.size());
-	ByteString decoded(expectedDecodedByteCount, '\0');
-	const decltype(expectedDecodedByteCount) decodedByteCount = EVP_DecodeBlock(
-	    decoded.data(), bytes.data(), static_cast<int>(bytes.size()));
+	if (bytes.empty()) {
+		return ByteString{};
+	}
 
-	if (decodedByteCount != expectedDecodedByteCount) {
+	for (const auto byte : bytes) {
+		if (!is_valid_base64_digit(byte)) {
+			return std::nullopt;
+		}
+	}
+
+	const auto expectedDecodedByteCount =
+	    base64_decoded_character_count<std::uint32_t>(bytes.size());
+
+	if (!expectedDecodedByteCount.has_value()) {
 		return std::nullopt;
 	}
+
+	ByteString decoded(expectedDecodedByteCount.value(), '\0');
+	int decodedByteCount = EVP_DecodeBlock(decoded.data(), bytes.data(),
+	                                       static_cast<int>(bytes.size()));
+
+	if (decodedByteCount < 0 ||
+	    expectedDecodedByteCount !=
+	        static_cast<std::uint32_t>(decodedByteCount)) {
+		return std::nullopt;
+	}
+
+	// Handle padding, since OpenSSL doesn't do that for us.
+	for (std::uint8_t i = 1; i <= 2; i++) {
+		if (bytes[bytes.size() - i] == '=' && decodedByteCount > 0) {
+			decodedByteCount--;
+		}
+	}
+
+	decoded.resize(decodedByteCount);
 
 	return decoded;
 }
 
 template <std::integral IntType>
-constexpr IntType base64_decoded_character_count(const IntType bytes) noexcept {
+constexpr std::optional<IntType>
+base64_decoded_character_count(const IntType bytes) noexcept {
 	const constexpr IntType b64GroupAlignment = 3;
 	const constexpr IntType b64GroupSize = 4;
-	assert(bytes % b64GroupSize == 0);
+
+	if (bytes % b64GroupSize != 0) {
+		return std::nullopt;
+	}
 
 	return (bytes / b64GroupSize) * b64GroupAlignment;
 }
@@ -73,9 +106,15 @@ std::string trim(const std::string& string) {
 		begin++;
 	}
 
-	while (begin != end && isspace(*end) != 0) {
+	while (begin != end && isspace(*(end - 1)) != 0) {
 		end--;
 	}
 
 	return std::string{ begin, end };
+}
+
+bool is_valid_base64_digit(std::uint8_t byte) {
+	return (byte >= '0' && byte <= '9') || (byte >= 'A' && byte <= 'Z') ||
+	       (byte >= 'a' && byte <= 'z') || byte == '+' || byte == '/' ||
+	       byte == '=';
 }

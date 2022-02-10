@@ -9,13 +9,16 @@ set(CMAKE_INSTALL_PREFIX ${CMAKE_CURRENT_BINARY_DIR})
 set(SRC_DIRECTORY src)
 set(HEADER_FILES
         certificates.hpp
+        literals.hpp
+        node.hpp
+        private-protocol.hpp
         public-protocol.hpp
         scope-exit.hpp
-        node.hpp
         utilities.hpp
         )
 set(SOURCE_FILES
         certificates.cpp
+        literals.cpp
         public-protocol.cpp
         utilities.cpp
         )

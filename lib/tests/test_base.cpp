@@ -1,7 +1,5 @@
-#include <cassert>
+#include "test.hpp"
 #include <iostream>
-
-void test();
 
 int main(int argc, char* argv[]) {
 	assert(argc > 0);
@@ -10,7 +8,7 @@ int main(int argc, char* argv[]) {
 
 	try {
 		test();
-		std::clog << "Success";
+		std::clog << "Success\n";
 	} catch (const char* error) {
 		std::clog << "Failure: " << error << "\n";
 		throw;
@@ -18,6 +16,14 @@ int main(int argc, char* argv[]) {
 		std::clog << "Failure: " << error << "\n";
 		throw;
 	}
+}
 
-	std::clog << "\n";
+std::string read_file(const std::string& filename) {
+	std::ifstream file{ filename };
+	const auto fileSize = std::filesystem::file_size(filename);
+	assert(fileSize < std::numeric_limits<long>::max());
+
+	std::string fileData(fileSize, '\0');
+	file.read(fileData.data(), static_cast<long>(fileSize));
+	return fileData;
 }

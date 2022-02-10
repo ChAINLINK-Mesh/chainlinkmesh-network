@@ -116,15 +116,15 @@ PublicProtocolManager get_testing_protocol_manager() {
 	          wireguardPubkey.begin());
 
 	PublicProtocolManager protocolManager{
-		"TestingKey",
+		"Testing Key",
 		Node{
 		    .id = 987654321ULL,
-		    .controlPlanePublicKey = wireguardPubkey,
-		    .meshPublicKey = read_file("legitimate-ca-pubkey.pem"),
-		    .meshIP = Poco::Net::IPAddress{ "10.0.0.1" },
-		    .wireguardIP = Poco::Net::IPAddress{ "127.0.0.1" },
-		    .controlPlanePort = Node::DEFAULT_CONTROL_PLANE_PORT,
-		    .wireguardPort = Node::DEFAULT_WIREGUARD_PORT,
+		    .controlPlanePublicKey = read_file("legitimate-ca-pubkey.pem"),
+		    .wireGuardPublicKey = wireguardPubkey,
+		    .controlPlaneIP = Poco::Net::IPAddress{ "10.0.0.1" },
+		    .wireGuardIP = Poco::Net::IPAddress{ "127.0.0.1" },
+		    .controlPlanePort = PublicProtocol::DEFAULT_CONTROL_PLANE_PORT,
+		    .wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,
 		}
 	};
 
