@@ -1,4 +1,5 @@
 #pragma once
+#include "types.hpp"
 #include <Poco/ByteOrder.h>
 #include <Poco/Net/IPAddress.h>
 #include <algorithm>
@@ -31,8 +32,6 @@ std::strong_ordering compare(Iter begin1, Iter end1, Iter begin2) {
 	return std::strong_ordering::equal;
 }
 
-using ByteString = std::basic_string<std::uint8_t>;
-
 /**
  * Gets the bytestring for an integral type, after converting to little-endian.
  * @tparam Type the integral type being represented
@@ -59,6 +58,7 @@ ByteString get_bytestring(const std::array<std::uint8_t, count>& value) {
 
 ByteString get_bytestring(Poco::Net::IPAddress address);
 ByteString get_bytestring(const std::string& string);
+ByteString get_bytestring(const ByteString& string);
 
 template <typename... Types>
 ByteString get_bytestring(const Types&... values) requires(sizeof...(Types) >
@@ -92,4 +92,5 @@ base64_decoded_character_count(IntType bytes) noexcept;
 
 bool is_valid_base64_digit(std::uint8_t byte);
 
-std::string trim(const std::string& string);
+std::string trim(const std::string_view& string);
+ByteString trim(const ByteStringView& string);

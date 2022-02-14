@@ -3,7 +3,7 @@
 #include "server.hpp"
 #include <Poco/Net/SocketAddress.h>
 
-std::string read_file(const std::string& filename);
+ByteString read_file(const std::string& filename);
 
 struct TestPorts {
 	Poco::Net::SocketAddress wireGuardAddress;

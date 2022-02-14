@@ -5,11 +5,12 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <utilities.hpp>
 
 /* Define this method in each testcase. */
 void test();
 
-std::string read_file(const std::string& filename);
+ByteString read_file(const std::string& filename);
 
 template <size_t ReadSize>
 std::array<std::uint8_t, ReadSize> read_file(const std::string& filename) {

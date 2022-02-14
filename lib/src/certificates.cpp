@@ -1,5 +1,6 @@
 #include "certificates.hpp"
 #include "scope-exit.hpp"
+#include "utilities.hpp"
 #include <cassert>
 #include <cstring>
 #include <fstream>
@@ -218,7 +219,7 @@ std::shared_ptr<CertificateManager> CertificateManager::get_instance() {
 }
 
 std::optional<X509_RAII_SHARED>
-CertificateManager::decode_pem_certificate(const std::string_view pem) {
+CertificateManager::decode_pem_certificate(const ByteStringView pem) {
 	assert(pem.size() < std::numeric_limits<int>::max());
 
 	BIO_RAII bio{ BIO_new(BIO_s_mem()) };
@@ -247,7 +248,7 @@ CertificateManager::decode_pem_certificate(const std::string_view pem) {
 }
 
 std::optional<X509_REQ_RAII>
-CertificateManager::decode_pem_csr(std::string_view pem) {
+CertificateManager::decode_pem_csr(ByteStringView pem) {
 	assert(pem.size() < std::numeric_limits<int>::max());
 
 	BIO_RAII bio{ BIO_new(BIO_s_mem()) };
@@ -308,7 +309,7 @@ CertificateManager::get_subject_attribute(const X509_NAME* const subject,
 	return attributes;
 }
 
-std::string CertificateManager::encode_pem(const X509_RAII_SHARED& x509) {
+ByteString CertificateManager::encode_pem(const X509_RAII_SHARED& x509) {
 	BIO_RAII bio{ BIO_new(BIO_s_mem()) };
 
 	if (PEM_write_bio_X509(bio.get(), x509.get()) == 0) {
@@ -322,10 +323,10 @@ std::string CertificateManager::encode_pem(const X509_RAII_SHARED& x509) {
 		throw std::invalid_argument{ "PEM buffer read error" };
 	}
 
-	return std::string{ data, data + pemSize };
+	return ByteString{ data, data + pemSize };
 }
 
-std::string CertificateManager::encode_pem(const X509_REQ_RAII& x509Req) {
+ByteString CertificateManager::encode_pem(const X509_REQ_RAII& x509Req) {
 	BIO_RAII bio{ BIO_new(BIO_s_mem()) };
 
 	if (PEM_write_bio_X509_REQ(bio.get(), x509Req.get()) == 0) {
@@ -339,7 +340,7 @@ std::string CertificateManager::encode_pem(const X509_REQ_RAII& x509Req) {
 		throw std::invalid_argument{ "PEM buffer read error" };
 	}
 
-	return std::string{ data, data + pemSize };
+	return ByteString{ data, data + pemSize };
 }
 
 bool operator==(const X509_REQ& a, const X509_REQ& b) {

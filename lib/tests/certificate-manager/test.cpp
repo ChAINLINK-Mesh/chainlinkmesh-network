@@ -1,5 +1,6 @@
 #include <certificates.hpp>
 #include <test.hpp>
+#include <literals.hpp>
 
 void instantiate_certificate_manager();
 void generate_certificate_request();
@@ -54,7 +55,7 @@ void decode_pem_csr() {
 		throw "Decoded invalid PEM file as CSR (this is an error)";
 	}
 
-	const auto* const empty = "";
+	const auto* const empty = ""_uc;
 
 	if (const auto emptyPEM = CertificateManager::decode_pem_csr(empty)) {
 		throw "Decoded empty file as CSR (this is an error)";

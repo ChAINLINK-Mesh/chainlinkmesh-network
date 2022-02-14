@@ -37,6 +37,10 @@ ByteString get_bytestring(const std::string& string) {
 	return ByteString{ string.begin(), string.end() };
 }
 
+ByteString get_bytestring(const ByteString& string) {
+	return string;
+}
+
 std::optional<ByteString> base64_decode(std::string_view bytes) {
 	return base64_decode(std::span<const std::uint8_t>{
 	    reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size() });
@@ -98,10 +102,8 @@ base64_decoded_character_count(const IntType bytes) noexcept {
 	return (bytes / b64GroupSize) * b64GroupAlignment;
 }
 
-std::string trim(const std::string& string) {
-	auto begin = string.begin();
-	auto end = string.end();
-
+template<typename StrType>
+StrType trim(const auto* begin, const auto* end) {
 	while (begin != end && isspace(*begin) != 0) {
 		begin++;
 	}
@@ -110,7 +112,15 @@ std::string trim(const std::string& string) {
 		end--;
 	}
 
-	return std::string{ begin, end };
+	return StrType{ begin, end };
+}
+
+std::string trim(const std::string_view& string) {
+	return trim<std::string>(string.begin(), string.end());
+}
+
+ByteString trim(const ByteStringView& string) {
+	return trim<ByteString>(string.begin(), string.end());
 }
 
 bool is_valid_base64_digit(std::uint8_t byte) {

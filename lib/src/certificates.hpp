@@ -1,5 +1,6 @@
 #pragma once
 
+#include "utilities.hpp"
 #include <cinttypes>
 #include <filesystem>
 #include <map>
@@ -75,7 +76,7 @@ public:
 	 * structure (never nullptr)
 	 */
 	static std::optional<X509_RAII_SHARED>
-	decode_pem_certificate(std::string_view pem);
+	decode_pem_certificate(ByteStringView pem);
 
 	/**
 	 * Decodes a certificate signing request in PEM representation.
@@ -83,7 +84,7 @@ public:
 	 * @return either std::nullopt or std::unique_pointer to the CSR structure
 	 * (never nullptr)
 	 */
-	static std::optional<X509_REQ_RAII> decode_pem_csr(std::string_view pem);
+	static std::optional<X509_REQ_RAII> decode_pem_csr(ByteStringView pem);
 
 	/**
 	 * Retrieves a list of values specified for a given subject attribute Numeric
@@ -103,7 +104,7 @@ public:
 	 * @param x509 the X509 certificate to encode
 	 * @return the PEM encoding of the given X509 certificate
 	 */
-	static std::string encode_pem(const X509_RAII_SHARED& x509);
+	static ByteString encode_pem(const X509_RAII_SHARED& x509);
 
 	/**
 	 * Encodes an X509 CSR to PEM format.
@@ -111,7 +112,7 @@ public:
 	 * @param x509 the X509 CSR to encode
 	 * @return the PEM encoding of the given X509 CSR
 	 */
-	static std::string encode_pem(const X509_REQ_RAII& x509Req);
+	static ByteString encode_pem(const X509_REQ_RAII& x509Req);
 
 protected:
 	CertificateManager(std::filesystem::path certificatesFolder);

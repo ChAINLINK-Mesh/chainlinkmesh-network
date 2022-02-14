@@ -44,12 +44,12 @@ int main(int argc, char* argv[]) {
 	}
 }
 
-std::string read_file(const std::string& filename) {
+ByteString read_file(const std::string& filename) {
 	std::ifstream file{ filename };
 	const auto fileSize = std::filesystem::file_size(filename);
 	assert(fileSize < std::numeric_limits<long>::max());
 
-	std::string fileData(fileSize, '\0');
-	file.read(fileData.data(), static_cast<long>(fileSize));
+	ByteString fileData(fileSize, '\0');
+	file.read(reinterpret_cast<char*>(fileData.data()), static_cast<long>(fileSize));
 	return fileData;
 }

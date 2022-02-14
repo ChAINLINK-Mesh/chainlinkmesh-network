@@ -25,7 +25,7 @@ public:
 		 *
 		 * Use to authenticate messages coming from this node.
 		 */
-		std::string controlPlanePublicKey;
+		ByteString controlPlanePublicKey;
 
 		/**
 		 * The data-plane's public key used to encrypt transmissions.

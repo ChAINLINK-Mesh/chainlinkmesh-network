@@ -1,4 +1,6 @@
 #include "public-protocol.hpp"
+#include "certificates.hpp"
+#include "utilities.hpp"
 #include <Poco/ByteOrder.h>
 #include <Poco/Net/TCPServer.h>
 #include <cassert>
@@ -140,8 +142,8 @@ PublicProtocolManager::decode_packet(BufferType& buffer) const {
 	}
 
 	{
-		std::string csrBytes(buffer.used(), '\0');
-		buffer.read(csrBytes.data(), csrBytes.size());
+		ByteString csrBytes(buffer.used(), '\0');
+		buffer.read(reinterpret_cast<char*>(csrBytes.data()), csrBytes.size());
 
 		if (auto optCSR = CertificateManager::decode_pem_csr(csrBytes)) {
 			packet.csr = std::move(optCSR.value());
@@ -168,8 +170,8 @@ PublicProtocolManager::decode_packet(BufferType& buffer) const {
 }
 
 std::optional<InitialisationPacket>
-PublicProtocolManager::decode_packet(std::span<const char> buffer) {
-	BufferType fifoBuffer{ buffer.data(), buffer.size() };
+PublicProtocolManager::decode_packet(ByteStringView buffer) {
+	BufferType fifoBuffer{ reinterpret_cast<const char*>(buffer.data()), buffer.size() };
 	fifoBuffer.setEOF(true);
 	return decode_packet(fifoBuffer);
 }
@@ -230,9 +232,9 @@ PublicProtocolManager::create_response(InitialisationPacket packet) {
 		.allocatedNode = /* TODO: Generate a node ID */ 0,
 		.respondingWireGuardPublicKey = this->selfNode.wireGuardPublicKey,
 		.respondingControlPlaneIPAddress = this->selfNode.controlPlaneIP,
-		.respondingWireguardIPAddress = this->selfNode.wireGuardIP,
+		.respondingWireGuardIPAddress = this->selfNode.wireGuardIP,
 		.respondingControlPlanePort = this->selfNode.controlPlanePort,
-		.respondingWireguardPort = this->selfNode.wireGuardPort,
+		.respondingWireGuardPort = this->selfNode.wireGuardPort,
 		.signedCSR = std::move(packet.csr),
 	};
 }
@@ -251,15 +253,13 @@ PublicProtocolManager::ConnectionFactory::createConnection(
 PublicConnection::PublicConnection(const Poco::Net::StreamSocket& socket,
                                    PublicProtocolManager& parent)
     : Poco::Net::TCPServerConnection{ socket }, parent{ parent } {
-	this->socket().setReceiveBufferSize(
-	    PublicProtocolManager::INIT_PACKET_BUFFER_SIZE);
+	this->socket().setReceiveBufferSize(InitialisationPacket::MAX_PACKET_SIZE);
 }
 
 void PublicConnection::run() {
-	BufferType buffer{ PublicProtocolManager::INIT_PACKET_BUFFER_SIZE };
+	BufferType buffer{ InitialisationPacket::MAX_PACKET_SIZE };
 
-	if (socket().receiveBytes(buffer) <
-	    PublicProtocolManager::MIN_PACKET_BUFFER_SIZE) {
+	if (socket().receiveBytes(buffer) < InitialisationPacket::MIN_PACKET_SIZE) {
 		return;
 	}
 
@@ -332,13 +332,148 @@ ByteString InitialisationRespPacket::get_bytes() const {
 	const auto respondingControlPlanePortLE =
 	    Poco::ByteOrder::fromLittleEndian(this->respondingControlPlanePort);
 	const auto respondingWireguardPortLE =
-	    Poco::ByteOrder::fromLittleEndian(this->respondingWireguardPort);
+	    Poco::ByteOrder::fromLittleEndian(this->respondingWireGuardPort);
 
 	ByteString bytes = get_bytestring(
 	    respondingNodeLE, allocatedNodeLE, this->respondingWireGuardPublicKey,
-	    this->respondingControlPlaneIPAddress, this->respondingWireguardIPAddress,
+	    this->respondingControlPlaneIPAddress, this->respondingWireGuardIPAddress,
 	    respondingControlPlanePortLE, respondingWireguardPortLE,
 	    CertificateManager::encode_pem(this->signedCSR));
 
 	return bytes;
+}
+
+std::optional<InitialisationRespPacket>
+InitialisationRespPacket::decode_bytes(const ByteString& bytes) {
+	if (bytes.size() < InitialisationRespPacket::MIN_PACKET_SIZE ||
+	    bytes.size() > InitialisationRespPacket::MAX_PACKET_SIZE) {
+		return std::nullopt;
+	}
+
+	InitialisationRespPacket packet{};
+	auto position = bytes.begin();
+
+	const auto read =
+	    [&position, bytesEnd = bytes.end()](
+	        std::iterator_traits<ByteString::iterator>::difference_type byteCount)
+	    -> std::optional<ByteStringView> {
+		if (std::distance(position, bytesEnd) < byteCount) {
+			return std::nullopt;
+		}
+
+		const auto prevPosition = position;
+		position += byteCount;
+		return ByteStringView{ prevPosition, position };
+	};
+
+	{
+		const auto respondingNodeBytes = read(sizeof(packet.respondingNode));
+
+		if (!respondingNodeBytes) {
+			return std::nullopt;
+		}
+
+		std::copy(respondingNodeBytes->begin(), respondingNodeBytes->end(),
+		          &packet.respondingNode);
+
+		packet.respondingNode =
+		    Poco::ByteOrder::fromLittleEndian(packet.respondingNode);
+	}
+
+	{
+		const auto allocatedNodeBytes = read(sizeof(packet.allocatedNode));
+
+		if (!allocatedNodeBytes) {
+			return std::nullopt;
+		}
+
+		std::copy(allocatedNodeBytes->begin(), allocatedNodeBytes->end(),
+		          &packet.allocatedNode);
+		packet.respondingNode =
+		    Poco::ByteOrder::fromLittleEndian(packet.respondingNode);
+	}
+
+	{
+		const auto respondingWireGuardPublicKeyBytes = read(Node::WG_PUBKEY_SIZE);
+
+		if (!respondingWireGuardPublicKeyBytes) {
+			return std::nullopt;
+		}
+
+		std::copy(respondingWireGuardPublicKeyBytes->begin(),
+		          respondingWireGuardPublicKeyBytes->end(),
+		          packet.respondingWireGuardPublicKey.begin());
+	}
+
+	{
+		const auto respondingControlPlaneIPAddressBytes = read(IPV6_ADDR_SIZE);
+
+		if (!respondingControlPlaneIPAddressBytes) {
+			return std::nullopt;
+		}
+
+		in6_addr addr{};
+		std::copy(respondingControlPlaneIPAddressBytes->begin(),
+		          respondingControlPlaneIPAddressBytes->end(), addr.s6_addr);
+
+		packet.respondingControlPlaneIPAddress =
+		    Poco::Net::IPAddress{ &addr, sizeof(addr) };
+	}
+
+	{
+		const auto respondingWireGuardIPAddressBytes = read(IPV6_ADDR_SIZE);
+
+		if (!respondingWireGuardIPAddressBytes) {
+			return std::nullopt;
+		}
+
+		in6_addr addr{};
+		std::copy(respondingWireGuardIPAddressBytes->begin(),
+		          respondingWireGuardIPAddressBytes->end(), addr.s6_addr);
+
+		packet.respondingWireGuardIPAddress =
+		    Poco::Net::IPAddress{ &addr, sizeof(addr) };
+	}
+
+	{
+		const auto respondingControlPlanePortBytes =
+		    read(sizeof(packet.respondingControlPlanePort));
+
+		if (!respondingControlPlanePortBytes) {
+			return std::nullopt;
+		}
+
+		std::copy(respondingControlPlanePortBytes->begin(),
+		          respondingControlPlanePortBytes->end(),
+		          &packet.respondingControlPlanePort);
+		packet.respondingControlPlanePort =
+		    Poco::ByteOrder::fromLittleEndian(packet.respondingControlPlanePort);
+	}
+
+	{
+		const auto respondingWireGuardPortBytes =
+		    read(sizeof(packet.respondingWireGuardPort));
+
+		if (!respondingWireGuardPortBytes) {
+			return std::nullopt;
+		}
+
+		std::copy(respondingWireGuardPortBytes->begin(),
+		          respondingWireGuardPortBytes->end(),
+		          &packet.respondingWireGuardPort);
+		packet.respondingWireGuardPort =
+		    Poco::ByteOrder::fromLittleEndian(packet.respondingControlPlanePort);
+	}
+
+	{
+		ByteStringView signedCSRBytes{ position, bytes.end() };
+
+		if (auto optSignedCSR = CertificateManager::decode_pem_csr(signedCSRBytes)) {
+			packet.signedCSR = std::move(optSignedCSR.value());
+		} else {
+			return std::nullopt;
+		}
+	}
+
+	return packet;
 }
