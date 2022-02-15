@@ -1,17 +1,19 @@
 #include "server.hpp"
+#include "types.hpp"
 #include <Poco/Net/SocketAddress.h>
 #include <Poco/Net/TCPServer.h>
 #include <private-protocol.hpp>
 #include <public-protocol.hpp>
 
 // Assign default socket addresses if custom addresses are not specified.
-Server::Server(const Server::Configuration& config)
+Server::Server(const Server::Configuration& config,
+               EVP_PKEY_RAII controlPlanePrivateKey)
     : publicProtoAddress{ config.publicProtoAddress.value_or(
 	        default_public_proto_address(config.wireGuardAddress)) },
       privateProtoAddress{ config.privateProtoAddress.value_or(
 	        default_private_proto_address(config.wireGuardAddress)) },
       wireGuardAddress{ config.wireGuardAddress }, publicProtoManager{
-	      Server::generate_psk(), Server::get_self(config)
+	      Server::generate_psk(), Server::get_self(config), std::move(controlPlanePrivateKey)
       } {}
 
 void Server::ServerExecution::stop() const {
@@ -66,6 +68,7 @@ Node Server::get_self(const Server::Configuration& config) {
 		.wireGuardIP = config.wireGuardAddress.host(),
 		.controlPlanePort = privateProtoAddress.port(),
 		.wireGuardPort = config.wireGuardAddress.port(),
+		.controlPlaneCertificate = config.controlPlaneCertificate,
 	};
 }
 

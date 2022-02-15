@@ -60,7 +60,7 @@ namespace PublicProtocol {
 		Poco::Net::IPAddress respondingWireGuardIPAddress;
 		std::uint16_t respondingControlPlanePort;
 		std::uint16_t respondingWireGuardPort;
-		X509_REQ_RAII signedCSR;
+		X509_RAII signedCSR;
 
 		[[nodiscard]] ByteString get_bytes() const;
 		[[nodiscard]] static std::optional<InitialisationRespPacket>
@@ -78,7 +78,8 @@ namespace PublicProtocol {
 
 	class PublicProtocolManager {
 	public:
-		PublicProtocolManager(std::string psk, const Node& self);
+		PublicProtocolManager(std::string psk, Node self,
+		                      EVP_PKEY_RAII controlPlanePrivateKey);
 		PublicProtocolManager(const PublicProtocolManager& other);
 		virtual ~PublicProtocolManager() = default;
 
@@ -86,8 +87,7 @@ namespace PublicProtocol {
 		start(const Poco::Net::ServerSocket& serverSocket,
 		      Poco::Net::TCPServerParams::Ptr params);
 
-		std::optional<InitialisationPacket>
-		decode_packet(ByteStringView buffer);
+		std::optional<InitialisationPacket> decode_packet(ByteStringView buffer);
 
 		std::optional<InitialisationRespPacket>
 		create_response(InitialisationPacket packet);
@@ -99,12 +99,17 @@ namespace PublicProtocol {
 	protected:
 		const std::string psk;
 		const Node selfNode;
+		const EVP_PKEY_RAII controlPlanePrivateKey;
 		mutable std::mutex nodesMutex;
 		std::map<std::uint64_t, Node> nodes;
 
 		std::optional<InitialisationPacket> decode_packet(BufferType& buffer) const;
 
 		static std::optional<EVP_PKEY_RAII> get_node_pkey(const Node& node);
+
+		// TODO: Review this validity period.
+		static const constexpr std::uint64_t DEFAULT_CERTIFICATE_VALIDITY_SECONDS =
+		    900ULL * 24ULL * 60ULL * 60ULL;
 
 		class ConnectionFactory : public Poco::Net::TCPServerConnectionFactory {
 		public:

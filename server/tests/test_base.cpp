@@ -1,3 +1,4 @@
+#include "certificates.hpp"
 #include "test.hpp"
 #include <Poco/Net/SocketAddress.h>
 #include <cassert>
@@ -30,7 +31,10 @@ int main(int argc, char* argv[]) {
 		.privateProtoAddress = SocketAddress{ TEST_HOST, privatePort },
 	};
 
-	Server server{ get_config(testPorts) };
+	const auto privateKeyBytes = read_file("legitimate-ca-key.pem");
+	auto privateKey = CertificateManager::decode_pem_private_key(privateKeyBytes);
+	assert(privateKey.has_value());
+	Server server{ get_config(testPorts), std::move(privateKey.value()) };
 
 	try {
 		test(server);

@@ -11,6 +11,7 @@ struct Node {
 	WireGuardPublicKey wireGuardPublicKey;
 	Poco::Net::IPAddress controlPlaneIP, wireGuardIP;
 	std::uint16_t controlPlanePort, wireGuardPort;
+	X509_RAII controlPlaneCertificate = nullptr;
 
 	const static std::uint16_t DEFAULT_WIREGUARD_PORT = 274;
 };

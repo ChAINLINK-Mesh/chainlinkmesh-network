@@ -12,9 +12,11 @@
 
 using namespace PublicProtocol;
 
-PublicProtocolManager::PublicProtocolManager(std::string psk, const Node& self)
-    : psk{ std::move(psk) }, selfNode{ self } {
-	this->nodes.insert(std::make_pair(self.id, self));
+PublicProtocolManager::PublicProtocolManager(
+    std::string psk, Node self, EVP_PKEY_RAII controlPlanePrivateKey)
+    : psk{ std::move(psk) }, selfNode{ self },
+      controlPlanePrivateKey{ std::move(controlPlanePrivateKey) } {
+	this->nodes.insert(std::make_pair(self.id, std::move(self)));
 }
 
 std::unique_ptr<Poco::Net::TCPServer>
@@ -171,7 +173,8 @@ PublicProtocolManager::decode_packet(BufferType& buffer) const {
 
 std::optional<InitialisationPacket>
 PublicProtocolManager::decode_packet(ByteStringView buffer) {
-	BufferType fifoBuffer{ reinterpret_cast<const char*>(buffer.data()), buffer.size() };
+	BufferType fifoBuffer{ reinterpret_cast<const char*>(buffer.data()),
+		                     buffer.size() };
 	fifoBuffer.setEOF(true);
 	return decode_packet(fifoBuffer);
 }
@@ -199,7 +202,9 @@ bool PublicProtocolManager::delete_node(const Node& node) {
 }
 
 PublicProtocolManager::PublicProtocolManager(const PublicProtocolManager& other)
-    : psk{ other.psk }, selfNode{ other.selfNode } {
+    : psk{ other.psk }, selfNode{ other.selfNode }, controlPlanePrivateKey{
+	      EVP_PKEY_dup(other.controlPlanePrivateKey.get())
+      } {
 	std::scoped_lock nodesLock{ other.nodesMutex, this->nodesMutex };
 	this->nodes = other.nodes;
 }
@@ -226,6 +231,15 @@ PublicProtocolManager::get_node_pkey(const Node& node) {
 
 std::optional<InitialisationRespPacket>
 PublicProtocolManager::create_response(InitialisationPacket packet) {
+	const auto signedCSR = CertificateManager::sign_csr(
+	    packet.csr, this->selfNode.controlPlaneCertificate,
+	    this->controlPlanePrivateKey,
+	    PublicProtocolManager::DEFAULT_CERTIFICATE_VALIDITY_SECONDS);
+
+	if (!signedCSR) {
+		return std::nullopt;
+	}
+
 	// TODO: Complete.
 	return InitialisationRespPacket{
 		.respondingNode = this->selfNode.id,
@@ -235,7 +249,7 @@ PublicProtocolManager::create_response(InitialisationPacket packet) {
 		.respondingWireGuardIPAddress = this->selfNode.wireGuardIP,
 		.respondingControlPlanePort = this->selfNode.controlPlanePort,
 		.respondingWireGuardPort = this->selfNode.wireGuardPort,
-		.signedCSR = std::move(packet.csr),
+		.signedCSR = signedCSR.value(),
 	};
 }
 
@@ -374,7 +388,7 @@ InitialisationRespPacket::decode_bytes(const ByteString& bytes) {
 		}
 
 		std::copy(respondingNodeBytes->begin(), respondingNodeBytes->end(),
-		          &packet.respondingNode);
+		          reinterpret_cast<std::uint8_t*>(&packet.respondingNode));
 
 		packet.respondingNode =
 		    Poco::ByteOrder::fromLittleEndian(packet.respondingNode);
@@ -388,9 +402,9 @@ InitialisationRespPacket::decode_bytes(const ByteString& bytes) {
 		}
 
 		std::copy(allocatedNodeBytes->begin(), allocatedNodeBytes->end(),
-		          &packet.allocatedNode);
-		packet.respondingNode =
-		    Poco::ByteOrder::fromLittleEndian(packet.respondingNode);
+		          reinterpret_cast<std::uint8_t*>(&packet.allocatedNode));
+		packet.allocatedNode =
+		    Poco::ByteOrder::fromLittleEndian(packet.allocatedNode);
 	}
 
 	{
@@ -443,9 +457,10 @@ InitialisationRespPacket::decode_bytes(const ByteString& bytes) {
 			return std::nullopt;
 		}
 
-		std::copy(respondingControlPlanePortBytes->begin(),
-		          respondingControlPlanePortBytes->end(),
-		          &packet.respondingControlPlanePort);
+		std::copy(
+		    respondingControlPlanePortBytes->begin(),
+		    respondingControlPlanePortBytes->end(),
+		    reinterpret_cast<std::uint8_t*>(&packet.respondingControlPlanePort));
 		packet.respondingControlPlanePort =
 		    Poco::ByteOrder::fromLittleEndian(packet.respondingControlPlanePort);
 	}
@@ -460,15 +475,16 @@ InitialisationRespPacket::decode_bytes(const ByteString& bytes) {
 
 		std::copy(respondingWireGuardPortBytes->begin(),
 		          respondingWireGuardPortBytes->end(),
-		          &packet.respondingWireGuardPort);
+		          reinterpret_cast<std::uint8_t*>(&packet.respondingWireGuardPort));
 		packet.respondingWireGuardPort =
-		    Poco::ByteOrder::fromLittleEndian(packet.respondingControlPlanePort);
+		    Poco::ByteOrder::fromLittleEndian(packet.respondingWireGuardPort);
 	}
 
 	{
 		ByteStringView signedCSRBytes{ position, bytes.end() };
 
-		if (auto optSignedCSR = CertificateManager::decode_pem_csr(signedCSRBytes)) {
+		if (auto optSignedCSR =
+		        CertificateManager::decode_pem_certificate(signedCSRBytes)) {
 			packet.signedCSR = std::move(optSignedCSR.value());
 		} else {
 			return std::nullopt;

@@ -1,10 +1,13 @@
 #include "test.hpp"
+#include "types.hpp"
 #include <Poco/FIFOBuffer.h>
 #include <Poco/Net/NetException.h>
 #include <Poco/Net/StreamSocket.h>
 #include <cassert>
 #include <chrono>
 #include <limits>
+#include <openssl/bio.h>
+#include <openssl/pem.h>
 #include <thread>
 
 void check_open_status(Server& server);
@@ -51,6 +54,11 @@ Server::Configuration get_config(const TestPorts& testPorts) {
 	std::copy(wireGuardPublicKeyBytes->begin(), wireGuardPublicKeyBytes->end(),
 	          wireGuardPublicKey.begin());
 
+	const auto caCertBytes = read_file("legitimate-ca.pem");
+	assert(caCertBytes.size() < std::numeric_limits<int>::max());
+	BIO_RAII caCertBio{ BIO_new_mem_buf(caCertBytes.data(), static_cast<int>(caCertBytes.size())) };
+	assert(caCertBio);
+
 	return Server::Configuration{
 		.id = 987654321,
 		.controlPlanePublicKey = controlPlanePublicKey,
@@ -58,5 +66,7 @@ Server::Configuration get_config(const TestPorts& testPorts) {
 		.wireGuardAddress = testPorts.wireGuardAddress,
 		.publicProtoAddress = testPorts.publicProtoAddress,
 		.privateProtoAddress = testPorts.privateProtoAddress,
+		.controlPlaneCertificate = X509_RAII{ PEM_read_bio_X509(
+		    caCertBio.get(), nullptr, nullptr, nullptr) },
 	};
 }

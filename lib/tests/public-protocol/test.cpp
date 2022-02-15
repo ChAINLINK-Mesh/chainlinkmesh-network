@@ -1,3 +1,4 @@
+#include "certificates.hpp"
 #include <cassert>
 #include <filesystem>
 #include <fstream>
@@ -15,6 +16,7 @@ void test_legitimate_packet();
 void test_invalid_psk_hash();
 void test_unknown_referring_node();
 void test_invalid_psk_signature();
+void test_legitimate_response_packet();
 
 void test() {
 	test_equality();
@@ -22,6 +24,7 @@ void test() {
 	test_invalid_psk_hash();
 	test_unknown_referring_node();
 	test_invalid_psk_signature();
+	test_legitimate_response_packet();
 }
 
 // Testing equality comparison
@@ -95,6 +98,26 @@ void test_invalid_psk_signature() {
 	}
 }
 
+void test_legitimate_response_packet() {
+	const auto legitimateResponsePacketBytes = read_file("legitimate-response-packet.data");
+
+	if (const auto legitimateResponsePacket = InitialisationRespPacket::decode_bytes(legitimateResponsePacketBytes)) {
+		if (legitimateResponsePacket->respondingNode != 987654321ull) {
+			throw "Failed to decode legitimate response packet's responding node";
+		}
+
+		if (legitimateResponsePacket->allocatedNode != 1223334444ull) {
+			throw "Failed to decode legitimate reponse packet's allocated node";
+		}
+
+		if (const auto& rWGPK = legitimateResponsePacket->respondingWireGuardPublicKey; !std::equal(rWGPK.begin(), rWGPK.end(), read_file("wireguard-pubkey.data").begin())) {
+			throw "Failed to decode legitimate response packet's responding WireGuard public key";
+		}
+	} else {
+		throw "Failed to decode legitimate response packet";
+	}
+}
+
 InitialisationPacket get_legitimate_packet() {
 	return InitialisationPacket{
 		.timestamp = 123456789ULL,
@@ -114,6 +137,13 @@ PublicProtocolManager get_testing_protocol_manager() {
 	Node::WireGuardPublicKey wireguardPubkey{};
 	std::copy(wireguardPubkeyFile.begin(), wireguardPubkeyFile.end(),
 	          wireguardPubkey.begin());
+	const auto certificateBytes = read_file("legitimate-ca.pem");
+	const auto certificate = CertificateManager::decode_pem_certificate(certificateBytes);
+	assert(certificate.has_value());
+
+	const auto privateKeyBytes = read_file("legitimate-ca-key.pem");
+	auto privateKey = CertificateManager::decode_pem_private_key(privateKeyBytes);
+	assert(privateKey.has_value());
 
 	PublicProtocolManager protocolManager{
 		"Testing Key",
@@ -125,7 +155,9 @@ PublicProtocolManager get_testing_protocol_manager() {
 		    .wireGuardIP = Poco::Net::IPAddress{ "127.0.0.1" },
 		    .controlPlanePort = PublicProtocol::DEFAULT_CONTROL_PLANE_PORT,
 		    .wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,
-		}
+				.controlPlaneCertificate = certificate.value(),
+		},
+		std::move(privateKey.value()),
 	};
 
 	return protocolManager;

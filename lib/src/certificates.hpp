@@ -8,39 +8,6 @@
 #include <optional>
 #include <vector>
 
-/*
- * Thanks to krzaq for this elegant stateless functor implementation:
- * https://dev.krzaq.cc/post/you-dont-need-a-stateful-deleter-in-your-unique_ptr-usually/
- */
-template <auto function>
-struct FunctionDeleter {
-	template <typename... Params>
-	auto operator()(Params&&... params) const {
-		return function(std::forward<Params...>(params...));
-	}
-};
-
-template <typename Type>
-struct OpenSSLDeleter {
-	auto operator()(Type* pointer) const {
-		return OPENSSL_free(pointer);
-	}
-};
-
-using NodeID = std::uint64_t;
-using BIO_RAII = std::unique_ptr<BIO, FunctionDeleter<BIO_free>>;
-using BN_RAII = std::unique_ptr<BIGNUM, FunctionDeleter<BN_free>>;
-using EVP_PKEY_RAII = std::unique_ptr<EVP_PKEY, FunctionDeleter<EVP_PKEY_free>>;
-using EVP_PKEY_CTX_RAII =
-    std::unique_ptr<EVP_PKEY_CTX, FunctionDeleter<EVP_PKEY_CTX_free>>;
-using X509_RAII_SHARED = std::shared_ptr<X509>;
-using X509_REQ_RAII = std::unique_ptr<X509_REQ, FunctionDeleter<X509_REQ_free>>;
-using X509_NAME_RAII =
-    std::unique_ptr<X509_NAME, FunctionDeleter<X509_NAME_free>>;
-
-template <typename Type>
-using OPENSSL_RAII = std::unique_ptr<Type, OpenSSLDeleter<Type>>;
-
 struct Certificate {
 	NodeID id;
 	X509_RAII_SHARED x509;
@@ -75,8 +42,7 @@ public:
 	 * @return either std::nullopt or std::unique_pointer to the certificate
 	 * structure (never nullptr)
 	 */
-	static std::optional<X509_RAII_SHARED>
-	decode_pem_certificate(ByteStringView pem);
+	static std::optional<X509_RAII> decode_pem_certificate(ByteStringView pem);
 
 	/**
 	 * Decodes a certificate signing request in PEM representation.
@@ -87,11 +53,21 @@ public:
 	static std::optional<X509_REQ_RAII> decode_pem_csr(ByteStringView pem);
 
 	/**
+	 * @brief Decodes the given PEM bytes into a private key.
+	 *
+	 * @param pem PEM encoded data, representing a private key
+	 * @return either the private key, or std::nullopt if the private key could
+	 *         not be decoded
+	 */
+	static std::optional<EVP_PKEY_RAII>
+	decode_pem_private_key(ByteStringView pem);
+
+	/**
 	 * Retrieves a list of values specified for a given subject attribute Numeric
 	 * ID.
 	 *
 	 * @param subject the OpenSSL subject name. Doesn't take an owning copy of the
-	 * data.
+	 *                data.
 	 * @param nid the subject attribute Numeric ID
 	 * @return a list of all values specified for this attribute
 	 */
@@ -104,7 +80,7 @@ public:
 	 * @param x509 the X509 certificate to encode
 	 * @return the PEM encoding of the given X509 certificate
 	 */
-	static ByteString encode_pem(const X509_RAII_SHARED& x509);
+	static ByteString encode_pem(const X509_RAII& x509);
 
 	/**
 	 * Encodes an X509 CSR to PEM format.
@@ -113,6 +89,21 @@ public:
 	 * @return the PEM encoding of the given X509 CSR
 	 */
 	static ByteString encode_pem(const X509_REQ_RAII& x509Req);
+
+	/**
+	 * @brief Signs a CSR with the given certificate and keys.
+	 *
+	 * @param req the X509 CSR request to sign
+	 * @param caCert what X509 certificate to use to sign this
+	 * @param key the X509 certificate private key
+	 * @param validityDurationSeconds how many seconds the signed certificate
+	 *                                should be valid for
+	 * @return either the signed certificate, or std::nullopt if the certificate
+	 *         could not be signed
+	 */
+	static std::optional<X509_RAII>
+	sign_csr(X509_REQ_RAII& req, const X509_RAII& caCert,
+	         const EVP_PKEY_RAII& key, std::uint64_t validityDurationSeconds);
 
 protected:
 	CertificateManager(std::filesystem::path certificatesFolder);
@@ -123,6 +114,9 @@ protected:
 	mutable std::map<NodeID, Certificate> certificatesMap;
 
 	static std::shared_ptr<CertificateManager> instance;
+
+	// X509v3 has version number of '2'
+	static const constexpr std::uint8_t DEFAULT_CERTIFICATE_VERSION{ 2 };
 };
 
 bool operator==(const X509_REQ& a, const X509_REQ& b);

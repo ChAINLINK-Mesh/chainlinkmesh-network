@@ -1,13 +1,16 @@
 #include "certificates.hpp"
 #include "scope-exit.hpp"
+#include "types.hpp"
 #include "utilities.hpp"
 #include <cassert>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <openssl/bio.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/x509.h>
+#include <optional>
 #include <vector>
 
 std::shared_ptr<CertificateManager> CertificateManager::instance = nullptr;
@@ -53,10 +56,12 @@ CertificateManager::get_certificate(const NodeID nodeID) const {
 	};
 	nodeCertificate.close();
 
+	assert(nodeCertificateBytes.size() < std::numeric_limits<long>::max());
+
 	const auto* bytePointer = nodeCertificateBytes.data();
 
 	X509* temp;
-	d2i_X509(&temp, &bytePointer, nodeCertificateBytes.size());
+	d2i_X509(&temp, &bytePointer, static_cast<long>(nodeCertificateBytes.size()));
 
 	Certificate certificate{ nodeID, X509_RAII_SHARED{ temp, &::X509_free } };
 
@@ -137,9 +142,9 @@ CertificateManager::generate_certificate_request(
 		return std::nullopt;
 	}
 
-	// X509v3 has version number of '2'
-	const constexpr std::uint8_t certificateVersion{ 2 };
-	if (X509_REQ_set_version(x509Req.get(), certificateVersion) != 1) {
+	if (X509_REQ_set_version(x509Req.get(),
+	                         CertificateManager::DEFAULT_CERTIFICATE_VERSION) !=
+	    1) {
 		return std::nullopt;
 	}
 
@@ -218,7 +223,7 @@ std::shared_ptr<CertificateManager> CertificateManager::get_instance() {
 	return CertificateManager::instance;
 }
 
-std::optional<X509_RAII_SHARED>
+std::optional<X509_RAII>
 CertificateManager::decode_pem_certificate(const ByteStringView pem) {
 	assert(pem.size() < std::numeric_limits<int>::max());
 
@@ -236,9 +241,8 @@ CertificateManager::decode_pem_certificate(const ByteStringView pem) {
 		return std::nullopt;
 	}
 
-	X509_RAII_SHARED certificate{
-		PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr), &::X509_free
-	};
+	X509_RAII certificate{ PEM_read_bio_X509(bio.get(), nullptr, nullptr,
+		                                       nullptr) };
 
 	if (!certificate) {
 		return std::nullopt;
@@ -275,6 +279,16 @@ CertificateManager::decode_pem_csr(ByteStringView pem) {
 	return certificate;
 }
 
+std::optional<EVP_PKEY_RAII>
+CertificateManager::decode_pem_private_key(ByteStringView pem) {
+	assert(pem.size() < std::numeric_limits<int>::max());
+
+	BIO_RAII pemBIO{ BIO_new_mem_buf(pem.data(), static_cast<int>(pem.size())) };
+
+	return EVP_PKEY_RAII{ PEM_read_bio_PrivateKey(pemBIO.get(), nullptr, nullptr,
+		                                            nullptr) };
+}
+
 std::vector<std::string>
 CertificateManager::get_subject_attribute(const X509_NAME* const subject,
                                           const int nid) {
@@ -309,7 +323,7 @@ CertificateManager::get_subject_attribute(const X509_NAME* const subject,
 	return attributes;
 }
 
-ByteString CertificateManager::encode_pem(const X509_RAII_SHARED& x509) {
+ByteString CertificateManager::encode_pem(const X509_RAII& x509) {
 	BIO_RAII bio{ BIO_new(BIO_s_mem()) };
 
 	if (PEM_write_bio_X509(bio.get(), x509.get()) == 0) {
@@ -341,6 +355,56 @@ ByteString CertificateManager::encode_pem(const X509_REQ_RAII& x509Req) {
 	}
 
 	return ByteString{ data, data + pemSize };
+}
+
+std::optional<X509_RAII>
+CertificateManager::sign_csr(X509_REQ_RAII& req, const X509_RAII& caCert,
+                             const EVP_PKEY_RAII& key,
+                             const std::uint64_t validityDurationSeconds) {
+	assert(validityDurationSeconds < std::numeric_limits<long>::max());
+
+	X509_RAII signedReq{ X509_new() };
+
+	if (!signedReq) {
+		return std::nullopt;
+	}
+
+	X509_set_version(signedReq.get(),
+	                 CertificateManager::DEFAULT_CERTIFICATE_VERSION);
+	const auto* const caCertPtr = caCert.get();
+	auto* const caSN = X509_get_subject_name(caCertPtr);
+
+	if (caSN == nullptr) {
+		return std::nullopt;
+	}
+
+	X509_set_issuer_name(signedReq.get(), caSN);
+
+	X509_gmtime_adj(X509_getm_notBefore(signedReq.get()), 0);
+	X509_gmtime_adj(X509_getm_notAfter(signedReq.get()),
+	                static_cast<long>(validityDurationSeconds));
+
+	auto* const reqSN = X509_REQ_get_subject_name(req.get());
+
+	if (reqSN == nullptr) {
+		return std::nullopt;
+	}
+
+	X509_set_subject_name(signedReq.get(), reqSN);
+
+	EVP_PKEY_RAII reqPubKey{ X509_REQ_get_pubkey(req.get()) };
+
+	if (reqPubKey == nullptr) {
+		return std::nullopt;
+	}
+
+	X509_set_pubkey(signedReq.get(), reqPubKey.get());
+
+	if (X509_sign(signedReq.get(), key.get(), EVP_sha256()) == 0) {
+		return std::nullopt;
+	}
+
+	return signedReq;
 }
 
 bool operator==(const X509_REQ& a, const X509_REQ& b) {

@@ -1,4 +1,5 @@
 #pragma once
+#include "types.hpp"
 #include <Poco/Net/SocketAddress.h>
 #include <Poco/Net/TCPServer.h>
 #include <cstdint>
@@ -52,14 +53,20 @@ public:
 		 * A value of std::nullopt implies the default address should be used.
 		 */
 		std::optional<Poco::Net::SocketAddress> privateProtoAddress;
+
+		/**
+		 * The control-plane certificate used to sign peer CSRs.
+		 */
+		X509_RAII controlPlaneCertificate;
 	};
 
 	/**
 	 * @brief Construct a new Server instance.
 	 *
 	 * @param config the server configuration to start with
+	 * @param controlPlanePrivateKey the private-key to sign certificates with
 	 */
-	explicit Server(const Configuration& config);
+	explicit Server(const Configuration& config, EVP_PKEY_RAII controlPlanePrivateKey);
 
 	struct ServerExecution {
 		std::unique_ptr<Poco::Net::TCPServer> publicProtoServer;
