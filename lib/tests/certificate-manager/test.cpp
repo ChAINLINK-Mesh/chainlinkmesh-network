@@ -1,6 +1,6 @@
 #include <certificates.hpp>
-#include <test.hpp>
 #include <literals.hpp>
+#include <test.hpp>
 
 void instantiate_certificate_manager();
 void generate_certificate_request();

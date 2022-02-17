@@ -58,6 +58,20 @@ public:
 		 * The control-plane certificate used to sign peer CSRs.
 		 */
 		X509_RAII controlPlaneCertificate;
+
+		/**
+		 * The TTL for request PSK values.
+		 *
+		 * A value of std::nullopt implies the default TTL should be used.
+		 */
+		std::optional<std::uint64_t> pskTTL;
+
+		/**
+		 * The clock used to check the current time.
+		 *
+		 * A value of std::nullopt implies the default TTL should be used.
+		 */
+		std::optional<Clock> clock;
 	};
 
 	/**
@@ -66,7 +80,8 @@ public:
 	 * @param config the server configuration to start with
 	 * @param controlPlanePrivateKey the private-key to sign certificates with
 	 */
-	explicit Server(const Configuration& config, EVP_PKEY_RAII controlPlanePrivateKey);
+	explicit Server(const Configuration& config,
+	                EVP_PKEY_RAII controlPlanePrivateKey);
 
 	struct ServerExecution {
 		std::unique_ptr<Poco::Net::TCPServer> publicProtoServer;
@@ -103,4 +118,6 @@ protected:
 	    const Poco::Net::SocketAddress& wireGuardAddress);
 	static Poco::Net::SocketAddress default_private_proto_address(
 	    const Poco::Net::SocketAddress& wireGuardAddress);
+
+	const constexpr static std::uint64_t DEFAULT_PSK_TTL = 120;
 };

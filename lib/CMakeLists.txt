@@ -9,6 +9,7 @@ set(CMAKE_INSTALL_PREFIX ${CMAKE_CURRENT_BINARY_DIR})
 set(SRC_DIRECTORY src)
 set(HEADER_FILES
         certificates.hpp
+        clock.hpp
         literals.hpp
         node.hpp
         private-protocol.hpp
@@ -18,6 +19,7 @@ set(HEADER_FILES
         )
 set(SOURCE_FILES
         certificates.cpp
+        clock.cpp
         literals.cpp
         public-protocol.cpp
         utilities.cpp

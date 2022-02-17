@@ -12,11 +12,11 @@
 
 using namespace PublicProtocol;
 
-PublicProtocolManager::PublicProtocolManager(
-    std::string psk, Node self, EVP_PKEY_RAII controlPlanePrivateKey)
-    : psk{ std::move(psk) }, selfNode{ self },
-      controlPlanePrivateKey{ std::move(controlPlanePrivateKey) } {
-	this->nodes.insert(std::make_pair(self.id, std::move(self)));
+PublicProtocolManager::PublicProtocolManager(Configuration config)
+    : psk{ std::move(config.psk) }, selfNode{ std::move(config.self) },
+      controlPlanePrivateKey{ std::move(config.controlPlanePrivateKey) },
+      pskTTL{ config.pskTTL }, clock{ config.clock } {
+	this->nodes.insert(std::make_pair(selfNode.id, selfNode));
 }
 
 std::unique_ptr<Poco::Net::TCPServer>
@@ -42,6 +42,14 @@ PublicProtocolManager::decode_packet(BufferType& buffer) const {
 		}
 
 		packet.timestamp = Poco::ByteOrder::fromLittleEndian(packet.timestamp);
+		const std::chrono::seconds timestamp{ packet.timestamp };
+		const auto now = this->clock->now();
+		const auto pskExpiryTime = timestamp + std::chrono::seconds{ this->pskTTL };
+
+		if (now.time_since_epoch() > pskExpiryTime ||
+		    now.time_since_epoch() < timestamp) {
+			return std::nullopt;
+		}
 	}
 
 	{
@@ -204,7 +212,7 @@ bool PublicProtocolManager::delete_node(const Node& node) {
 PublicProtocolManager::PublicProtocolManager(const PublicProtocolManager& other)
     : psk{ other.psk }, selfNode{ other.selfNode }, controlPlanePrivateKey{
 	      EVP_PKEY_dup(other.controlPlanePrivateKey.get())
-      } {
+      }, clock{ other.clock } {
 	std::scoped_lock nodesLock{ other.nodesMutex, this->nodesMutex };
 	this->nodes = other.nodes;
 }

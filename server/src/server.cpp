@@ -1,9 +1,12 @@
 #include "server.hpp"
+#include "clock.hpp"
 #include "types.hpp"
 #include <Poco/Net/SocketAddress.h>
 #include <Poco/Net/TCPServer.h>
 #include <private-protocol.hpp>
 #include <public-protocol.hpp>
+
+using PublicProtocol::PublicProtocolManager;
 
 // Assign default socket addresses if custom addresses are not specified.
 Server::Server(const Server::Configuration& config,
@@ -13,7 +16,13 @@ Server::Server(const Server::Configuration& config,
       privateProtoAddress{ config.privateProtoAddress.value_or(
 	        default_private_proto_address(config.wireGuardAddress)) },
       wireGuardAddress{ config.wireGuardAddress }, publicProtoManager{
-	      Server::generate_psk(), Server::get_self(config), std::move(controlPlanePrivateKey)
+	      PublicProtocolManager::Configuration{
+	          .psk = Server::generate_psk(),
+	          .self = Server::get_self(config),
+	          .controlPlanePrivateKey = std::move(controlPlanePrivateKey),
+	          .pskTTL = config.pskTTL.value_or(Server::DEFAULT_PSK_TTL),
+	          .clock = config.clock.value_or(std::make_shared<SystemClock>()),
+	      }
       } {}
 
 void Server::ServerExecution::stop() const {

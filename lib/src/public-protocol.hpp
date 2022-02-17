@@ -1,5 +1,7 @@
 #pragma once
+
 #include "certificates.hpp"
+#include "clock.hpp"
 #include "node.hpp"
 #include "utilities.hpp"
 #include <Poco/Net/TCPServer.h>
@@ -78,8 +80,15 @@ namespace PublicProtocol {
 
 	class PublicProtocolManager {
 	public:
-		PublicProtocolManager(std::string psk, Node self,
-		                      EVP_PKEY_RAII controlPlanePrivateKey);
+		struct Configuration {
+			std::string psk;
+			Node self;
+			EVP_PKEY_RAII controlPlanePrivateKey;
+			std::uint64_t pskTTL;
+			Clock clock;
+		};
+
+		PublicProtocolManager(Configuration config);
 		PublicProtocolManager(const PublicProtocolManager& other);
 		virtual ~PublicProtocolManager() = default;
 
@@ -100,6 +109,9 @@ namespace PublicProtocol {
 		const std::string psk;
 		const Node selfNode;
 		const EVP_PKEY_RAII controlPlanePrivateKey;
+		std::uint64_t pskTTL;
+		const Clock clock;
+
 		mutable std::mutex nodesMutex;
 		std::map<std::uint64_t, Node> nodes;
 

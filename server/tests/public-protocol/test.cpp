@@ -56,7 +56,8 @@ Server::Configuration get_config(const TestPorts& testPorts) {
 
 	const auto caCertBytes = read_file("legitimate-ca.pem");
 	assert(caCertBytes.size() < std::numeric_limits<int>::max());
-	BIO_RAII caCertBio{ BIO_new_mem_buf(caCertBytes.data(), static_cast<int>(caCertBytes.size())) };
+	BIO_RAII caCertBio{ BIO_new_mem_buf(caCertBytes.data(),
+		                                  static_cast<int>(caCertBytes.size())) };
 	assert(caCertBio);
 
 	return Server::Configuration{
@@ -68,5 +69,8 @@ Server::Configuration get_config(const TestPorts& testPorts) {
 		.privateProtoAddress = testPorts.privateProtoAddress,
 		.controlPlaneCertificate = X509_RAII{ PEM_read_bio_X509(
 		    caCertBio.get(), nullptr, nullptr, nullptr) },
+		.pskTTL = 100,
+		.clock = std::make_shared<TestClock>(std::chrono::seconds{ 123456789 }), // i.e. the same second the PSK was
+																																						 // generated
 	};
 }

@@ -1,4 +1,5 @@
 #include "certificates.hpp"
+#include "clock.hpp"
 #include <cassert>
 #include <filesystem>
 #include <fstream>
@@ -99,9 +100,12 @@ void test_invalid_psk_signature() {
 }
 
 void test_legitimate_response_packet() {
-	const auto legitimateResponsePacketBytes = read_file("legitimate-response-packet.data");
+	const auto legitimateResponsePacketBytes =
+	    read_file("legitimate-response-packet.data");
 
-	if (const auto legitimateResponsePacket = InitialisationRespPacket::decode_bytes(legitimateResponsePacketBytes)) {
+	if (const auto legitimateResponsePacket =
+	        InitialisationRespPacket::decode_bytes(
+	            legitimateResponsePacketBytes)) {
 		if (legitimateResponsePacket->respondingNode != 987654321ull) {
 			throw "Failed to decode legitimate response packet's responding node";
 		}
@@ -110,8 +114,12 @@ void test_legitimate_response_packet() {
 			throw "Failed to decode legitimate reponse packet's allocated node";
 		}
 
-		if (const auto& rWGPK = legitimateResponsePacket->respondingWireGuardPublicKey; !std::equal(rWGPK.begin(), rWGPK.end(), read_file("wireguard-pubkey.data").begin())) {
-			throw "Failed to decode legitimate response packet's responding WireGuard public key";
+		if (const auto& rWGPK =
+		        legitimateResponsePacket->respondingWireGuardPublicKey;
+		    !std::equal(rWGPK.begin(), rWGPK.end(),
+		                read_file("wireguard-pubkey.data").begin())) {
+			throw "Failed to decode legitimate response packet's responding "
+			      "WireGuard public key";
 		}
 	} else {
 		throw "Failed to decode legitimate response packet";
@@ -138,27 +146,32 @@ PublicProtocolManager get_testing_protocol_manager() {
 	std::copy(wireguardPubkeyFile.begin(), wireguardPubkeyFile.end(),
 	          wireguardPubkey.begin());
 	const auto certificateBytes = read_file("legitimate-ca.pem");
-	const auto certificate = CertificateManager::decode_pem_certificate(certificateBytes);
+	const auto certificate =
+	    CertificateManager::decode_pem_certificate(certificateBytes);
 	assert(certificate.has_value());
 
 	const auto privateKeyBytes = read_file("legitimate-ca-key.pem");
 	auto privateKey = CertificateManager::decode_pem_private_key(privateKeyBytes);
 	assert(privateKey.has_value());
 
-	PublicProtocolManager protocolManager{
-		"Testing Key",
-		Node{
-		    .id = 987654321ULL,
-		    .controlPlanePublicKey = read_file("legitimate-ca-pubkey.pem"),
-		    .wireGuardPublicKey = wireguardPubkey,
-		    .controlPlaneIP = Poco::Net::IPAddress{ "10.0.0.1" },
-		    .wireGuardIP = Poco::Net::IPAddress{ "127.0.0.1" },
-		    .controlPlanePort = PublicProtocol::DEFAULT_CONTROL_PLANE_PORT,
-		    .wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,
-				.controlPlaneCertificate = certificate.value(),
-		},
-		std::move(privateKey.value()),
-	};
+	PublicProtocolManager protocolManager{ PublicProtocolManager::Configuration{
+		  .psk = "Testing Key",
+		  .self =
+		      Node{
+		          .id = 987654321ULL,
+		          .controlPlanePublicKey = read_file("legitimate-ca-pubkey.pem"),
+		          .wireGuardPublicKey = wireguardPubkey,
+		          .controlPlaneIP = Poco::Net::IPAddress{ "10.0.0.1" },
+		          .wireGuardIP = Poco::Net::IPAddress{ "127.0.0.1" },
+		          .controlPlanePort = PublicProtocol::DEFAULT_CONTROL_PLANE_PORT,
+		          .wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,
+		          .controlPlaneCertificate = certificate.value(),
+		      },
+		  .controlPlanePrivateKey = std::move(privateKey.value()),
+		  .pskTTL = 100,
+		  .clock = std::make_shared<TestClock>(std::chrono::seconds{
+		      123456789 }), // I.e. the same second the PSK was generated
+	} };
 
 	return protocolManager;
 }
