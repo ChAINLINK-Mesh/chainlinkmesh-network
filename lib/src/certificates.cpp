@@ -1,5 +1,5 @@
 #include "certificates.hpp"
-#include "scope-exit.hpp"
+#include "debug.h"
 #include "types.hpp"
 #include "utilities.hpp"
 #include <cassert>
@@ -9,6 +9,7 @@
 #include <openssl/bio.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
+#include <openssl/rsa.h>
 #include <openssl/x509.h>
 #include <optional>
 #include <vector>
@@ -78,7 +79,7 @@ void CertificateManager::set_certificate(NodeID nodeID,
 	unsigned char* certificateBytes = nullptr;
 	const int certificateBytesCount =
 	    i2d_X509(certificate.x509.get(), &certificateBytes);
-	ScopeExit scopeExit1{ [certificateBytes]() { free(certificateBytes); } };
+	OPENSSL_RAII<unsigned char> scopeExit1{ certificateBytes };
 
 	std::ofstream certificateFile{ get_certificate_path(nodeID) };
 	certificateFile.write(reinterpret_cast<char*>(certificateBytes),
@@ -87,18 +88,8 @@ void CertificateManager::set_certificate(NodeID nodeID,
 	certificatesMap.try_emplace(nodeID, certificate);
 }
 
-[[nodiscard]] std::optional<X509_REQ_RAII>
-CertificateManager::generate_certificate_request(
-    const CertificateInfo& certificateInfo) {
-	assert(certificateInfo.country.size() < std::numeric_limits<int>::max());
-	assert(certificateInfo.province.size() < std::numeric_limits<int>::max());
-	assert(certificateInfo.city.size() < std::numeric_limits<int>::max());
-	assert(certificateInfo.organisation.size() < std::numeric_limits<int>::max());
-	assert(certificateInfo.commonName.size() < std::numeric_limits<int>::max());
-	assert(certificateInfo.certificateKeyLength <
-	       std::numeric_limits<int>::max());
-	assert(certificateInfo.validityDuration < std::numeric_limits<int>::max());
-
+[[nodiscard]] std::optional<EVP_PKEY_RAII>
+CertificateManager::generate_rsa_key(std::uint32_t keyLength) {
 	const EVP_PKEY_CTX_RAII rsaCtx{ EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, nullptr) };
 
 	// If we failed to generate a valid RSA context.
@@ -110,9 +101,8 @@ CertificateManager::generate_certificate_request(
 		return std::nullopt;
 	}
 
-	if (EVP_PKEY_CTX_set_rsa_keygen_bits(
-	        rsaCtx.get(),
-	        static_cast<int>(certificateInfo.certificateKeyLength)) <= 0) {
+	if (EVP_PKEY_CTX_set_rsa_keygen_bits(rsaCtx.get(),
+	                                     static_cast<int>(keyLength)) <= 0) {
 		return std::nullopt;
 	}
 
@@ -120,10 +110,28 @@ CertificateManager::generate_certificate_request(
 	if (EVP_PKEY_keygen(rsaCtx.get(), &tempRSAKey) != 1) {
 		return std::nullopt;
 	}
-	const EVP_PKEY_RAII rsaKey{ tempRSAKey };
+
+	return EVP_PKEY_RAII{ tempRSAKey };
+}
+
+[[nodiscard]] std::optional<X509_RAII>
+CertificateManager::generate_certificate(const CertificateInfo& certificateInfo,
+                                         const EVP_PKEY_RAII& rsaKey) {
+	assert(certificateInfo.certificateKeyLength <
+	       std::numeric_limits<int>::max());
+	assert(certificateInfo.validityDuration < std::numeric_limits<long>::max());
+
+	if (debug_check(static_cast<int>(certificateInfo.certificateKeyLength) !=
+	                EVP_PKEY_get_bits(rsaKey.get()))) {
+		return std::nullopt;
+	}
+
+	if (!rsaKey) {
+		return std::nullopt;
+	}
 
 	// Generate X509 representation
-	const X509_RAII_SHARED x509{ X509_new(), &::X509_free };
+	X509_RAII x509{ X509_new() };
 
 	// If we failed to initialise the X509 representation.
 	if (!x509) {
@@ -131,9 +139,48 @@ CertificateManager::generate_certificate_request(
 	}
 
 	// Set certificate properties
-	X509_gmtime_adj(X509_get_notBefore(x509.get()), 0);
-	X509_gmtime_adj(X509_get_notAfter(x509.get()),
+	X509_gmtime_adj(X509_getm_notBefore(x509.get()), 0);
+	X509_gmtime_adj(X509_getm_notAfter(x509.get()),
 	                static_cast<long>(certificateInfo.validityDuration));
+
+	if (X509_set_pubkey(x509.get(), rsaKey.get()) != 1) {
+		return std::nullopt;
+	}
+
+	auto* x509Name = X509_get_subject_name(x509.get());
+
+	if (x509Name == nullptr) {
+		return std::nullopt;
+	}
+
+	if (!x509_set_name_from_certificate_info(x509Name, certificateInfo)) {
+		return std::nullopt;
+	}
+
+	if (X509_set_issuer_name(x509.get(), x509Name) != 1) {
+		return std::nullopt;
+	}
+
+	if (X509_sign(x509.get(), rsaKey.get(), EVP_sha256()) == 0) {
+		return std::nullopt;
+	}
+
+	return x509;
+}
+
+[[nodiscard]] std::optional<X509_REQ_RAII>
+CertificateManager::generate_certificate_request(
+    const CertificateInfo& certificateInfo) {
+	assert(certificateInfo.certificateKeyLength <
+	       std::numeric_limits<int>::max());
+	assert(certificateInfo.validityDuration < std::numeric_limits<long>::max());
+
+	// Generate RSA key
+	const auto rsaKey = generate_rsa_key(certificateInfo.certificateKeyLength);
+
+	if (!rsaKey) {
+		return std::nullopt;
+	}
 
 	X509_REQ_RAII x509Req{ X509_REQ_new() };
 
@@ -149,59 +196,23 @@ CertificateManager::generate_certificate_request(
 	}
 
 	// Set certificate subject
-	X509_NAME_RAII x509Name{ X509_NAME_new() };
+	auto* x509Name{ X509_REQ_get_subject_name(x509Req.get()) };
 
-	if (!x509Name) {
+	if (x509Name == nullptr) {
 		return std::nullopt;
 	}
 
-	if (X509_NAME_add_entry_by_txt(
-	        x509Name.get(), "C", MBSTRING_UTF8,
-	        reinterpret_cast<const unsigned char*>(
-	            certificateInfo.country.data()),
-	        static_cast<int>(certificateInfo.country.length()), -1, 0) != 1) {
-		return std::nullopt;
-	}
-
-	if (X509_NAME_add_entry_by_txt(
-	        x509Name.get(), "ST", MBSTRING_UTF8,
-	        reinterpret_cast<const unsigned char*>(
-	            certificateInfo.province.data()),
-	        static_cast<int>(certificateInfo.province.length()), -1, 0) != 1) {
-		return std::nullopt;
-	}
-
-	if (X509_NAME_add_entry_by_txt(
-	        x509Name.get(), "L", MBSTRING_UTF8,
-	        reinterpret_cast<const unsigned char*>(certificateInfo.city.data()),
-	        static_cast<int>(certificateInfo.city.length()), -1, 0) != 1) {
-		return std::nullopt;
-	}
-
-	if (X509_NAME_add_entry_by_txt(
-	        x509Name.get(), "O", MBSTRING_UTF8,
-	        reinterpret_cast<const unsigned char*>(
-	            certificateInfo.organisation.data()),
-	        static_cast<int>(certificateInfo.organisation.length()), -1,
-	        0) != 1) {
-		return std::nullopt;
-	}
-
-	if (X509_NAME_add_entry_by_txt(
-	        x509Name.get(), "CN", MBSTRING_UTF8,
-	        reinterpret_cast<const unsigned char*>(
-	            certificateInfo.commonName.data()),
-	        static_cast<int>(certificateInfo.commonName.length()), -1, 0) != 1) {
+	if (!x509_set_name_from_certificate_info(x509Name, certificateInfo)) {
 		return std::nullopt;
 	}
 
 	// Set public key of X509 request
-	if (X509_REQ_set_pubkey(x509Req.get(), rsaKey.get()) != 1) {
+	if (X509_REQ_set_pubkey(x509Req.get(), rsaKey->get()) != 1) {
 		return std::nullopt;
 	}
 
 	// Set the sign key of X509 request
-	if (X509_REQ_sign(x509Req.get(), rsaKey.get(), EVP_sha1()) <= 0) {
+	if (X509_REQ_sign(x509Req.get(), rsaKey->get(), EVP_sha1()) <= 0) {
 		return std::nullopt;
 	}
 
@@ -405,6 +416,57 @@ CertificateManager::sign_csr(X509_REQ_RAII& req, const X509_RAII& caCert,
 	}
 
 	return signedReq;
+}
+
+bool CertificateManager::x509_set_name_from_certificate_info(
+    X509_NAME* x509Name, const CertificateInfo& certificateInfo) {
+	assert(certificateInfo.country.size() < std::numeric_limits<int>::max());
+	assert(certificateInfo.province.size() < std::numeric_limits<int>::max());
+	assert(certificateInfo.city.size() < std::numeric_limits<int>::max());
+	assert(certificateInfo.organisation.size() < std::numeric_limits<int>::max());
+	assert(certificateInfo.commonName.size() < std::numeric_limits<int>::max());
+
+	if (X509_NAME_add_entry_by_txt(
+	        x509Name, "C", MBSTRING_UTF8,
+	        reinterpret_cast<const unsigned char*>(
+	            certificateInfo.country.data()),
+	        static_cast<int>(certificateInfo.country.length()), -1, 0) != 1) {
+		return false;
+	}
+
+	if (X509_NAME_add_entry_by_txt(
+	        x509Name, "ST", MBSTRING_UTF8,
+	        reinterpret_cast<const unsigned char*>(
+	            certificateInfo.province.data()),
+	        static_cast<int>(certificateInfo.province.length()), -1, 0) != 1) {
+		return false;
+	}
+
+	if (X509_NAME_add_entry_by_txt(
+	        x509Name, "L", MBSTRING_UTF8,
+	        reinterpret_cast<const unsigned char*>(certificateInfo.city.data()),
+	        static_cast<int>(certificateInfo.city.length()), -1, 0) != 1) {
+		return false;
+	}
+
+	if (X509_NAME_add_entry_by_txt(
+	        x509Name, "O", MBSTRING_UTF8,
+	        reinterpret_cast<const unsigned char*>(
+	            certificateInfo.organisation.data()),
+	        static_cast<int>(certificateInfo.organisation.length()), -1,
+	        0) != 1) {
+		return false;
+	}
+
+	if (X509_NAME_add_entry_by_txt(
+	        x509Name, "CN", MBSTRING_UTF8,
+	        reinterpret_cast<const unsigned char*>(
+	            certificateInfo.commonName.data()),
+	        static_cast<int>(certificateInfo.commonName.length()), -1, 0) != 1) {
+		return false;
+	}
+
+	return true;
 }
 
 bool operator==(const X509_REQ& a, const X509_REQ& b) {

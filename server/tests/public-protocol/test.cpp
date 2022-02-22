@@ -11,8 +11,10 @@
 #include <thread>
 
 void check_open_status(Server& server);
+Server::Configuration get_config(const TestPorts& testPorts);
 
-void test(Server& server) {
+void test() {
+	auto server = get_server(get_config(get_test_ports()));
 	check_open_status(server);
 }
 
@@ -70,7 +72,8 @@ Server::Configuration get_config(const TestPorts& testPorts) {
 		.controlPlaneCertificate = X509_RAII{ PEM_read_bio_X509(
 		    caCertBio.get(), nullptr, nullptr, nullptr) },
 		.pskTTL = 100,
-		.clock = std::make_shared<TestClock>(std::chrono::seconds{ 123456789 }), // i.e. the same second the PSK was
-																																						 // generated
+		.clock = std::make_shared<TestClock>(
+		    std::chrono::seconds{ 123456789 }), // i.e. the same second the PSK was
+		                                        // generated
 	};
 }

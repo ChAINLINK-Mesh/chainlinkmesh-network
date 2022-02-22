@@ -105,6 +105,10 @@ namespace PublicProtocol {
 		std::optional<Node> get_node(std::uint64_t nodeID) const;
 		bool delete_node(const Node& node);
 
+		// TODO: Review this validity period.
+		static const constexpr std::uint64_t DEFAULT_CERTIFICATE_VALIDITY_SECONDS =
+		    900ULL * 24ULL * 60ULL * 60ULL;
+
 	protected:
 		const std::string psk;
 		const Node selfNode;
@@ -118,10 +122,6 @@ namespace PublicProtocol {
 		std::optional<InitialisationPacket> decode_packet(BufferType& buffer) const;
 
 		static std::optional<EVP_PKEY_RAII> get_node_pkey(const Node& node);
-
-		// TODO: Review this validity period.
-		static const constexpr std::uint64_t DEFAULT_CERTIFICATE_VALIDITY_SECONDS =
-		    900ULL * 24ULL * 60ULL * 60ULL;
 
 		class ConnectionFactory : public Poco::Net::TCPServerConnectionFactory {
 		public:

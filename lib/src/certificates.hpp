@@ -28,7 +28,14 @@ public:
 	[[nodiscard]] std::optional<Certificate> get_certificate(NodeID nodeID) const;
 	void set_certificate(NodeID nodeID, const Certificate& certificate);
 
+	[[nodiscard]] static std::optional<EVP_PKEY_RAII>
+	generate_rsa_key(std::uint32_t keyLength);
+
 	// Generates a X509v3 certificate
+	[[nodiscard]] static std::optional<X509_RAII>
+	generate_certificate(const CertificateInfo& certificateInfo, const EVP_PKEY_RAII& rsaKey);
+
+	// Generates a X509v3 certificate-signing-request
 	[[nodiscard]] static std::optional<X509_REQ_RAII>
 	generate_certificate_request(const CertificateInfo& certificateInfo);
 
@@ -109,6 +116,18 @@ protected:
 	CertificateManager(std::filesystem::path certificatesFolder);
 
 	std::filesystem::path get_certificate_path(NodeID nodeID) const;
+
+	/**
+	 * @brief Sets up an X509 subject name structure according to the certificate
+	 * information provided.
+	 *
+	 * @param name the X509 subject name to setup
+	 * @param certificateInfo the certificate details
+	 * @return whether the operation was a success
+	 */
+	static bool
+	x509_set_name_from_certificate_info(X509_NAME* name,
+	                                    const CertificateInfo& certificateInfo);
 
 	const std::filesystem::path certificatesFolder;
 	mutable std::map<NodeID, Certificate> certificatesMap;

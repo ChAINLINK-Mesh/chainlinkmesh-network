@@ -2,14 +2,14 @@ cmake_minimum_required(VERSION 3.12)
 
 project(wgmesh-server)
 
-set(CMAKE_CXX_STANDARD 20)
-
 set(SRC_DIRECTORY src)
 set(HEADER_FILES
         server.hpp
+        app.hpp
         )
 set(SOURCE_FILES
         server.cpp
+        app.cpp
         )
 
 list(TRANSFORM HEADER_FILES PREPEND "${SRC_DIRECTORY}/")
@@ -24,7 +24,7 @@ set(BASE_COMPILE_ARGS
 
 add_library("lib-${PROJECT_NAME}" STATIC ${SOURCE_FILES} ${HEADER_FILES})
 target_include_directories("lib-${PROJECT_NAME}" PUBLIC ${SRC_DIRECTORY})
-target_link_libraries("lib-${PROJECT_NAME}" PUBLIC lib-wgmesh)
+target_link_libraries("lib-${PROJECT_NAME}" PUBLIC lib-wgmesh Poco::Util)
 
 add_executable(${PROJECT_NAME} "src/main.cpp")
 target_link_libraries(${PROJECT_NAME} PUBLIC "lib-${PROJECT_NAME}")

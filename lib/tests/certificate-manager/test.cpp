@@ -1,14 +1,19 @@
 #include <certificates.hpp>
 #include <literals.hpp>
+#include <openssl/evp.h>
 #include <test.hpp>
 
 void instantiate_certificate_manager();
+void generate_rsa_key();
+void generate_certificate();
 void generate_certificate_request();
 void decode_pem_csr();
 void reencode_pem_csr();
 
 void test() {
 	instantiate_certificate_manager();
+	generate_rsa_key();
+	generate_certificate();
 	generate_certificate_request();
 	decode_pem_csr();
 	reencode_pem_csr();
@@ -20,6 +25,79 @@ void instantiate_certificate_manager() {
 
 	if (!certificateManager) {
 		throw "Failed to create certificate manager object";
+	}
+}
+
+void generate_rsa_key() {
+	// Create a 2-bit RSA key
+	const auto invalidLengthKey = CertificateManager::generate_rsa_key(2);
+
+	if (invalidLengthKey) {
+		throw "Incorrectly created 2-bit RSA key (should be invalid)";
+	}
+
+	const auto validKeyLength = 4096;
+	const auto validLengthKey =
+	    CertificateManager::generate_rsa_key(validKeyLength);
+
+	if (!validLengthKey) {
+		throw "Failed to create a valid " + std::to_string(validKeyLength) +
+		    "-bit RSA key";
+	}
+
+	if (EVP_PKEY_get_base_id(validLengthKey->get()) != EVP_PKEY_RSA) {
+		throw "Failed to generate an RSA key, generated another cryptosystem's key instead";
+	}
+
+	if (const auto kl = EVP_PKEY_get_bits(validLengthKey->get());
+	    kl != validKeyLength) {
+		throw "Created a valid RSA key, but was " + std::to_string(kl) +
+		    " bits instead of the requested " + std::to_string(validKeyLength) +
+		    " bits";
+	}
+}
+
+void generate_certificate() {
+	if (CertificateManager::generate_certificate(CertificateInfo{},
+	                                             EVP_PKEY_RAII{})) {
+		throw "Incorrectly created a certificate from invalid null private key";
+	}
+
+	const auto key = CertificateManager::generate_rsa_key(2048).value();
+	const CertificateInfo invalidCertificateInfo{
+		.certificateKeyLength = 2048,
+		.country = "",
+		.province = "",
+		.city = "",
+		.organisation = "",
+		.commonName = "",
+		.validityDuration = 900,
+	};
+
+	if (CertificateManager::generate_certificate(invalidCertificateInfo, key)) {
+		throw "Incorrectly created certificate from invalid certificate information";
+	}
+
+	CertificateInfo certificateInfo{
+		.certificateKeyLength = 128,
+		.country = "GB",
+		.province = "England",
+		.city = "London",
+		.organisation = "Imperial College London",
+		.commonName = "imperial.ac.uk",
+		.validityDuration = 900,
+	};
+
+	if (CertificateManager::generate_certificate(certificateInfo, key)) {
+		throw "Incorrectly created certificate with disagreeing key lengths";
+	}
+
+	certificateInfo.certificateKeyLength = 2048;
+	const auto validCertificate =
+	    CertificateManager::generate_certificate(certificateInfo, key);
+
+	if (!validCertificate) {
+		throw "Failed to create certificate from valid details.";
 	}
 }
 

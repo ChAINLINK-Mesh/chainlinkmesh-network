@@ -44,10 +44,10 @@ unknown-referring-node.data: unknown-referring-node.protodata legitimate-psk.sha
 
 legitimate-ca.pem: legitimate-ca-key.pem
 	# Set a validity of 1000 days for root CA certificate
-	openssl req -x509 -nodes -key $< -out $@ -sha256 -days 1000 -subj "/C=UK/ST=Test CA State/L=Test CA City/O=Test CA Organisation/OU=Test CA Organisational Unit/CN=Test CA Common Name"
+	openssl req -x509 -nodes -key $< -out $@ -sha256 -days 1000 -subj "/C=GB/ST=Test CA State/L=Test CA City/O=Test CA Organisation/OU=Test CA Organisational Unit/CN=Test CA Common Name"
 
 legitimate-csr.csr: legitimate-csr-key.pem
-	openssl req -new -nodes -key $< -out $@ -subj "/C=UK/ST=Test State/L=Test City/O=Test Organisation/OU=Test Organisational Unit/CN=Test Common Name"
+	openssl req -new -nodes -key $< -out $@ -subj "/C=GB/ST=Test State/L=Test City/O=Test Organisation/OU=Test Organisational Unit/CN=Test Common Name"
 
 wireguard-privkey.key:
 	wg genkey > $@
