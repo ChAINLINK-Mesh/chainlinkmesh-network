@@ -24,6 +24,7 @@ ByteString read_file(const std::string& filename) {
 	assert(fileSize < std::numeric_limits<long>::max());
 
 	ByteString fileData(fileSize, '\0');
-	file.read(reinterpret_cast<char*>(fileData.data()), static_cast<long>(fileSize));
+	file.read(reinterpret_cast<char*>(fileData.data()),
+	          static_cast<long>(fileSize));
 	return fileData;
 }

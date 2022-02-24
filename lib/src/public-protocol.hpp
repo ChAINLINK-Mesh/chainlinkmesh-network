@@ -13,8 +13,6 @@
 
 namespace PublicProtocol {
 	const constexpr std::uint16_t DEFAULT_CONTROL_PLANE_PORT = 272;
-	const constexpr std::uint16_t SHA256_DIGEST_SIZE = 32;
-	const constexpr std::uint16_t SHA256_SIGNATURE_SIZE = 256;
 	const constexpr std::uint16_t MAX_CSR_SIZE = 1400;
 	const constexpr std::uint16_t SHA256_DIGEST_B64_SIZE =
 	    base64_encoded_character_count(SHA256_DIGEST_SIZE);
@@ -29,8 +27,8 @@ namespace PublicProtocol {
 	 * node capable of authorising connections.
 	 */
 	struct InitialisationPacket {
-		using Hash = std::array<std::uint8_t, SHA256_DIGEST_SIZE>;
-		using Signature = std::array<std::uint8_t, SHA256_SIGNATURE_SIZE>;
+		using Hash = SHA256_Hash;
+		using Signature = SHA256_Signature;
 
 		std::uint64_t timestamp;
 		Hash timestampPSKHash;
@@ -40,6 +38,7 @@ namespace PublicProtocol {
 		// TODO: Require UNSTRUCTUREDADDRESS to be the node's WireGuard public key
 		X509_REQ_RAII csr;
 
+		[[nodiscard]] ByteString get_bytes() const;
 		std::strong_ordering operator<=>(const InitialisationPacket& other) const;
 		bool operator==(const InitialisationPacket& other) const;
 		bool operator!=(const InitialisationPacket& other) const = default;
@@ -109,6 +108,13 @@ namespace PublicProtocol {
 		static const constexpr std::uint64_t DEFAULT_CERTIFICATE_VALIDITY_SECONDS =
 		    900ULL * 24ULL * 60ULL * 60ULL;
 
+		std::string get_psk() const;
+		std::optional<std::tuple<std::uint64_t, SHA256_Hash, SHA256_Signature>>
+		get_signed_psk() const;
+
+		const constexpr static std::uint64_t DEFAULT_PSK_TTL = 120;
+		static const std::string DEFAULT_PSK;
+
 	protected:
 		const std::string psk;
 		const Node selfNode;
@@ -120,8 +126,6 @@ namespace PublicProtocol {
 		std::map<std::uint64_t, Node> nodes;
 
 		std::optional<InitialisationPacket> decode_packet(BufferType& buffer) const;
-
-		static std::optional<EVP_PKEY_RAII> get_node_pkey(const Node& node);
 
 		class ConnectionFactory : public Poco::Net::TCPServerConnectionFactory {
 		public:

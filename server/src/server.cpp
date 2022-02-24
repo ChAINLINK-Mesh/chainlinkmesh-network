@@ -9,21 +9,24 @@
 using PublicProtocol::PublicProtocolManager;
 
 // Assign default socket addresses if custom addresses are not specified.
-Server::Server(const Server::Configuration& config,
-               EVP_PKEY_RAII controlPlanePrivateKey)
+Server::Server(const Server::Configuration& config)
     : publicProtoAddress{ config.publicProtoAddress.value_or(
 	        default_public_proto_address(config.wireGuardAddress)) },
       privateProtoAddress{ config.privateProtoAddress.value_or(
 	        default_private_proto_address(config.wireGuardAddress)) },
-      wireGuardAddress{ config.wireGuardAddress }, publicProtoManager{
-	      PublicProtocolManager::Configuration{
-	          .psk = Server::generate_psk(),
-	          .self = Server::get_self(config),
-	          .controlPlanePrivateKey = std::move(controlPlanePrivateKey),
-	          .pskTTL = config.pskTTL.value_or(Server::DEFAULT_PSK_TTL),
-	          .clock = config.clock.value_or(std::make_shared<SystemClock>()),
-	      }
-      } {}
+      wireGuardAddress{ config.wireGuardAddress }, self{ Server::get_self(
+	                                                     config) },
+      publicProtoManager{ PublicProtocolManager::Configuration{
+	        // TODO: replace with a cryptographically secure PSK-generation
+	        // function
+	        .psk = config.psk.value_or(PublicProtocolManager::DEFAULT_PSK),
+	        .self = self,
+	        .controlPlanePrivateKey = config.controlPlanePrivateKey,
+	        .pskTTL =
+	            config.pskTTL.value_or(PublicProtocolManager::DEFAULT_PSK_TTL),
+	        .clock = config.clock.value_or(std::make_shared<SystemClock>()),
+	    } },
+      controlPlanePrivateKey{ config.controlPlanePrivateKey } {}
 
 void Server::ServerExecution::stop() const {
 	if (this->publicProtoServer) {
@@ -71,7 +74,7 @@ Node Server::get_self(const Server::Configuration& config) {
 	// TODO: replace with actual implementation
 	return Node{
 		.id = 987654321,
-		.controlPlanePublicKey = config.controlPlanePublicKey,
+		.controlPlanePublicKey = config.controlPlanePrivateKey,
 		.wireGuardPublicKey = config.meshPublicKey,
 		.controlPlaneIP = privateProtoAddress.host(),
 		.wireGuardIP = config.wireGuardAddress.host(),
@@ -81,9 +84,17 @@ Node Server::get_self(const Server::Configuration& config) {
 	};
 }
 
-std::string Server::generate_psk() {
-	// TODO: replace with a cryptographically secure PSK-generation function
-	return "Testing Key";
+std::string Server::get_psk() const {
+	return publicProtoManager.get_psk();
+}
+
+std::optional<std::tuple<std::uint64_t, SHA256_Hash, SHA256_Signature>>
+Server::get_signed_psk() const {
+	return publicProtoManager.get_signed_psk();
+}
+
+Node Server::get_self() const {
+	return self;
 }
 
 Poco::Net::SocketAddress Server::default_public_proto_address(

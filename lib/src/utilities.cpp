@@ -61,7 +61,7 @@ base64_decode(const std::span<const std::uint8_t> bytes) {
 	}
 
 	const auto expectedDecodedByteCount =
-	    base64_decoded_character_count<std::uint32_t>(bytes.size());
+	    base64_decoded_character_count(bytes.size());
 
 	if (!expectedDecodedByteCount.has_value()) {
 		return std::nullopt;
@@ -89,11 +89,31 @@ base64_decode(const std::span<const std::uint8_t> bytes) {
 	return decoded;
 }
 
-template <std::integral IntType>
-constexpr std::optional<IntType>
-base64_decoded_character_count(const IntType bytes) noexcept {
-	const constexpr IntType b64GroupAlignment = 3;
-	const constexpr IntType b64GroupSize = 4;
+std::optional<std::string> base64_encode(ByteString bytes) {
+	return base64_encode(
+	    std::span<const std::uint8_t>{ bytes.data(), bytes.size() });
+}
+
+std::optional<std::string> base64_encode(std::span<const std::uint8_t> bytes) {
+	assert(bytes.size() < std::numeric_limits<int>::max());
+	const auto expectedEncodedSize = base64_encoded_character_count(bytes.size());
+	std::string encoded(expectedEncodedSize, '\0');
+	const auto encodedSize =
+	    EVP_EncodeBlock(reinterpret_cast<std::uint8_t*>(encoded.data()),
+	                    bytes.data(), static_cast<int>(bytes.size()));
+	if (encodedSize == -1) {
+		return std::nullopt;
+	};
+
+	encoded.resize(encodedSize);
+
+	return encoded;
+}
+
+std::optional<std::uint64_t>
+base64_decoded_character_count(const std::uint64_t bytes) noexcept {
+	const constexpr std::uint64_t b64GroupAlignment = 3;
+	const constexpr std::uint64_t b64GroupSize = 4;
 
 	if (bytes % b64GroupSize != 0) {
 		return std::nullopt;
@@ -102,7 +122,7 @@ base64_decoded_character_count(const IntType bytes) noexcept {
 	return (bytes / b64GroupSize) * b64GroupAlignment;
 }
 
-template<typename StrType>
+template <typename StrType>
 StrType trim(const auto* begin, const auto* end) {
 	while (begin != end && isspace(*begin) != 0) {
 		begin++;

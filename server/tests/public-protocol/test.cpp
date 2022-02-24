@@ -1,4 +1,5 @@
 #include "test.hpp"
+#include "certificates.hpp"
 #include "types.hpp"
 #include <Poco/FIFOBuffer.h>
 #include <Poco/Net/NetException.h>
@@ -46,7 +47,12 @@ void check_open_status(Server& server) {
 }
 
 Server::Configuration get_config(const TestPorts& testPorts) {
-	const auto controlPlanePublicKey = read_file("legitimate-ca-pubkey.pem");
+	const auto controlPlanePrivateKeyBytes =
+	    read_file("legitimate-ca-pubkey.pem");
+	auto controlPlanePrivateKey =
+	    CertificateManager::decode_pem_private_key(controlPlanePrivateKeyBytes);
+	assert(controlPlanePrivateKey);
+
 	const auto wireGuardPublicKeyBytes =
 	    base64_decode(trim(read_file("wireguard-pubkey.key")));
 	assert(wireGuardPublicKeyBytes.has_value());
@@ -64,13 +70,14 @@ Server::Configuration get_config(const TestPorts& testPorts) {
 
 	return Server::Configuration{
 		.id = 987654321,
-		.controlPlanePublicKey = controlPlanePublicKey,
+		.controlPlanePrivateKey = controlPlanePrivateKey.value(),
 		.meshPublicKey = wireGuardPublicKey,
 		.wireGuardAddress = testPorts.wireGuardAddress,
 		.publicProtoAddress = testPorts.publicProtoAddress,
 		.privateProtoAddress = testPorts.privateProtoAddress,
 		.controlPlaneCertificate = X509_RAII{ PEM_read_bio_X509(
 		    caCertBio.get(), nullptr, nullptr, nullptr) },
+		.psk = std::nullopt,
 		.pskTTL = 100,
 		.clock = std::make_shared<TestClock>(
 		    std::chrono::seconds{ 123456789 }), // i.e. the same second the PSK was

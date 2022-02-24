@@ -143,7 +143,7 @@ PublicProtocolManager get_testing_protocol_manager() {
 	const auto wireguardPubkeyBytes = base64_decode(wireguardPubkeyFile);
 	assert(wireguardPubkeyBytes.has_value());
 	Node::WireGuardPublicKey wireguardPubkey{};
-	std::copy(wireguardPubkeyFile.begin(), wireguardPubkeyFile.end(),
+	std::copy(wireguardPubkeyBytes->begin(), wireguardPubkeyBytes->end(),
 	          wireguardPubkey.begin());
 	const auto certificateBytes = read_file("legitimate-ca.pem");
 	const auto certificate =
@@ -159,7 +159,7 @@ PublicProtocolManager get_testing_protocol_manager() {
 		  .self =
 		      Node{
 		          .id = 987654321ULL,
-		          .controlPlanePublicKey = read_file("legitimate-ca-pubkey.pem"),
+		          .controlPlanePublicKey = privateKey.value(),
 		          .wireGuardPublicKey = wireguardPubkey,
 		          .controlPlaneIP = Poco::Net::IPAddress{ "10.0.0.1" },
 		          .wireGuardIP = Poco::Net::IPAddress{ "127.0.0.1" },
@@ -167,7 +167,7 @@ PublicProtocolManager get_testing_protocol_manager() {
 		          .wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,
 		          .controlPlaneCertificate = certificate.value(),
 		      },
-		  .controlPlanePrivateKey = std::move(privateKey.value()),
+		  .controlPlanePrivateKey = privateKey.value(),
 		  .pskTTL = 100,
 		  .clock = std::make_shared<TestClock>(std::chrono::seconds{
 		      123456789 }), // I.e. the same second the PSK was generated

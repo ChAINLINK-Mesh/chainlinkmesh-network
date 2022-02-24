@@ -10,7 +10,7 @@ struct TestPorts {
 };
 
 ByteString read_file(const std::string& filename);
-Server get_server(const Server::Configuration& config);
+Server get_server(Server::Configuration config);
 TestPorts get_test_ports();
 
 /* Implement this method in test-cases. */

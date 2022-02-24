@@ -23,11 +23,11 @@ public:
 		std::optional<std::uint64_t> id;
 
 		/**
-		 * The control-plane's certificate public key.
+		 * The control-plane private key
 		 *
-		 * Use to authenticate messages coming from this node.
+		 * Used to sign messages to other peers.
 		 */
-		ByteString controlPlanePublicKey;
+		EVP_PKEY_RAII controlPlanePrivateKey;
 
 		/**
 		 * The data-plane's public key used to encrypt transmissions.
@@ -61,6 +61,11 @@ public:
 		X509_RAII controlPlaneCertificate;
 
 		/**
+		 * The PSK used to authenticate initialisation requests.
+		 */
+		std::optional<std::string> psk;
+
+		/**
 		 * The TTL for request PSK values.
 		 *
 		 * A value of std::nullopt implies the default TTL should be used.
@@ -81,8 +86,7 @@ public:
 	 * @param config the server configuration to start with
 	 * @param controlPlanePrivateKey the private-key to sign certificates with
 	 */
-	explicit Server(const Configuration& config,
-	                EVP_PKEY_RAII controlPlanePrivateKey);
+	explicit Server(const Configuration& config);
 
 	struct ServerExecution {
 		std::unique_ptr<Poco::Net::TCPServer> publicProtoServer;
@@ -97,11 +101,18 @@ public:
 	Poco::Net::SocketAddress get_private_proto_address();
 	Poco::Net::SocketAddress get_wireguard_address();
 
+	std::string get_psk() const;
+	std::optional<std::tuple<std::uint64_t, SHA256_Hash, SHA256_Signature>>
+	get_signed_psk() const;
+	Node get_self() const;
+
 protected:
 	Poco::Net::SocketAddress publicProtoAddress;
 	Poco::Net::SocketAddress privateProtoAddress;
 	Poco::Net::SocketAddress wireGuardAddress;
+	Node self;
 	PublicProtocol::PublicProtocolManager publicProtoManager;
+	EVP_PKEY_RAII controlPlanePrivateKey;
 
 	/**
 	 * @brief Dynamically allocates TCP server parameters for the public
@@ -111,14 +122,10 @@ protected:
 	 */
 	static Poco::Net::TCPServerParams::Ptr public_tcp_server_params();
 
-	static std::string generate_psk();
-
 	static Node get_self(const Configuration& config);
 
 	static Poco::Net::SocketAddress default_public_proto_address(
 	    const Poco::Net::SocketAddress& wireGuardAddress);
 	static Poco::Net::SocketAddress default_private_proto_address(
 	    const Poco::Net::SocketAddress& wireGuardAddress);
-
-	const constexpr static std::uint64_t DEFAULT_PSK_TTL = 120;
 };

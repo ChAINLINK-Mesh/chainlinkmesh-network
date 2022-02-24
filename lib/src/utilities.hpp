@@ -65,7 +65,8 @@ ByteString get_bytestring(const Types&... values) requires(sizeof...(Types) >
                                                            1) {
 	ByteString bytestring{};
 
-	for (const auto value : (get_bytestring(values), ...)) {
+	for (const auto& value :
+	     std::vector<ByteString>{ get_bytestring(values)... }) {
 		bytestring += value;
 	}
 
@@ -86,9 +87,11 @@ constexpr IntType base64_encoded_character_count(IntType bytes) noexcept {
 std::optional<ByteString> base64_decode(std::string_view bytes);
 std::optional<ByteString> base64_decode(std::span<const std::uint8_t> bytes);
 
-template <std::integral IntType>
-constexpr std::optional<IntType>
-base64_decoded_character_count(IntType bytes) noexcept;
+std::optional<std::string> base64_encode(ByteString bytes);
+std::optional<std::string> base64_encode(std::span<const std::uint8_t> bytes);
+
+std::optional<std::uint64_t>
+base64_decoded_character_count(std::uint64_t bytes) noexcept;
 
 bool is_valid_base64_digit(std::uint8_t byte);
 

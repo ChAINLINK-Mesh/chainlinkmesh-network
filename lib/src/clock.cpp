@@ -8,8 +8,7 @@ TestClock::TestClock(TimePoint initialTimePoint)
     : currentTime{ initialTimePoint } {}
 
 TestClock::TestClock(Duration initialUTCTimestamp)
-	: currentTime{ initialUTCTimestamp }
-{}
+    : currentTime{ initialUTCTimestamp } {}
 
 TestClock& TestClock::operator+=(Duration duration) {
 	this->currentTime += duration;

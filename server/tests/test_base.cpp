@@ -39,11 +39,12 @@ ByteString read_file(const std::string& filename) {
 	return fileData;
 }
 
-Server get_server(const Server::Configuration& config) {
+Server get_server(Server::Configuration config) {
 	const auto privateKeyBytes = read_file("legitimate-ca-key.pem");
 	auto privateKey = CertificateManager::decode_pem_private_key(privateKeyBytes);
 	assert(privateKey.has_value());
-	return Server{ config, std::move(privateKey.value()) };
+	config.controlPlanePrivateKey = privateKey.value();
+	return Server{ config };
 }
 
 TestPorts get_test_ports() {

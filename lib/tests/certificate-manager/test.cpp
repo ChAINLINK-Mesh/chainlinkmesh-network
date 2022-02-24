@@ -46,7 +46,8 @@ void generate_rsa_key() {
 	}
 
 	if (EVP_PKEY_get_base_id(validLengthKey->get()) != EVP_PKEY_RSA) {
-		throw "Failed to generate an RSA key, generated another cryptosystem's key instead";
+		throw "Failed to generate an RSA key, generated another cryptosystem's key "
+		      "instead";
 	}
 
 	if (const auto kl = EVP_PKEY_get_bits(validLengthKey->get());
@@ -75,7 +76,8 @@ void generate_certificate() {
 	};
 
 	if (CertificateManager::generate_certificate(invalidCertificateInfo, key)) {
-		throw "Incorrectly created certificate from invalid certificate information";
+		throw "Incorrectly created certificate from invalid certificate "
+		      "information";
 	}
 
 	CertificateInfo certificateInfo{

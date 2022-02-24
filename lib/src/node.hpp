@@ -7,7 +7,7 @@ struct Node {
 	using WireGuardPublicKey = std::array<std::uint8_t, WG_PUBKEY_SIZE>;
 
 	std::uint64_t id;
-	ByteString controlPlanePublicKey;
+	EVP_PKEY_RAII controlPlanePublicKey;
 	WireGuardPublicKey wireGuardPublicKey;
 	Poco::Net::IPAddress controlPlaneIP, wireGuardIP;
 	std::uint16_t controlPlanePort, wireGuardPort;

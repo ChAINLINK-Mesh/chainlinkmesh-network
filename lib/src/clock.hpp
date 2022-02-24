@@ -11,7 +11,8 @@ public:
 	AbstractClock() = default;
 	virtual ~AbstractClock() = default;
 
-	[[nodiscard]] virtual std::chrono::time_point<UnderlyingClock> now() const = 0;
+	[[nodiscard]] virtual std::chrono::time_point<UnderlyingClock>
+	now() const = 0;
 };
 
 using BaseUnderlyingClock = std::chrono::system_clock;
@@ -24,14 +25,15 @@ public:
 	SystemClock(SystemClock&& other) noexcept = default;
 	~SystemClock() override = default;
 
-	[[nodiscard]] std::chrono::time_point<BaseUnderlyingClock> now() const override;
+	[[nodiscard]] std::chrono::time_point<BaseUnderlyingClock>
+	now() const override;
 };
 
 class TestClock : public AbstractClock<BaseUnderlyingClock> {
 public:
 	using TimePoint = std::chrono::time_point<BaseUnderlyingClock>;
-	using Duration =
-	    std::chrono::duration<typename BaseUnderlyingClock::rep, typename BaseUnderlyingClock::period>;
+	using Duration = std::chrono::duration<typename BaseUnderlyingClock::rep,
+	                                       typename BaseUnderlyingClock::period>;
 
 	TestClock() = default;
 	TestClock(TimePoint initialTimePoint);

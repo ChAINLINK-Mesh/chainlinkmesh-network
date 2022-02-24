@@ -4,12 +4,14 @@ project(wgmesh-server)
 
 set(SRC_DIRECTORY src)
 set(HEADER_FILES
-        server.hpp
         app.hpp
+        server.hpp
+        validators.hpp
         )
 set(SOURCE_FILES
-        server.cpp
         app.cpp
+        server.cpp
+        validators.cpp
         )
 
 list(TRANSFORM HEADER_FILES PREPEND "${SRC_DIRECTORY}/")

@@ -33,7 +33,8 @@ public:
 
 	// Generates a X509v3 certificate
 	[[nodiscard]] static std::optional<X509_RAII>
-	generate_certificate(const CertificateInfo& certificateInfo, const EVP_PKEY_RAII& rsaKey);
+	generate_certificate(const CertificateInfo& certificateInfo,
+	                     const EVP_PKEY_RAII& rsaKey);
 
 	// Generates a X509v3 certificate-signing-request
 	[[nodiscard]] static std::optional<X509_REQ_RAII>

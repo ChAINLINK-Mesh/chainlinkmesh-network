@@ -1,9 +1,9 @@
 #pragma once
 
 #ifdef NDEBUG
-#define DEBUG_MODE false
+#	define DEBUG_MODE false
 #else
-#define DEBUG_MODE true
+#	define DEBUG_MODE true
 #endif
 
 /**
