@@ -4,29 +4,31 @@ project(wgmesh-server)
 
 set(SRC_DIRECTORY src)
 set(HEADER_FILES
-        app.hpp
-        server.hpp
-        validators.hpp
-        )
+    app.hpp
+    linux-wireguard-manager.hpp
+    server.hpp
+    validators.hpp
+    )
 set(SOURCE_FILES
-        app.cpp
-        server.cpp
-        validators.cpp
-        )
+    app.cpp
+    linux-wireguard-manager.cpp
+    server.cpp
+    validators.cpp
+    )
 
 list(TRANSFORM HEADER_FILES PREPEND "${SRC_DIRECTORY}/")
 list(TRANSFORM SOURCE_FILES PREPEND "${SRC_DIRECTORY}/")
 
 set(BASE_COMPILE_ARGS
-        -Wall
-        -Wextra
-        -Wpedantic
-        -Werror
-        )
+    -Wall
+    -Wextra
+    -Wpedantic
+    -Werror
+    )
 
 add_library("lib-${PROJECT_NAME}" STATIC ${SOURCE_FILES} ${HEADER_FILES})
 target_include_directories("lib-${PROJECT_NAME}" PUBLIC ${SRC_DIRECTORY})
-target_link_libraries("lib-${PROJECT_NAME}" PUBLIC lib-wgmesh Poco::Util)
+target_link_libraries("lib-${PROJECT_NAME}" PUBLIC lib-wgmesh linux-wg-interface Poco::Util)
 
 add_executable(${PROJECT_NAME} "src/main.cpp")
 target_link_libraries(${PROJECT_NAME} PUBLIC "lib-${PROJECT_NAME}")
@@ -52,19 +54,19 @@ FOREACH (subdir ${SUBDIRS})
     target_include_directories(${TEST_NAME}  PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     IF (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}/Makefile")
         ExternalProject_Add(
-                "${TEST_NAME}_Makefile" SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}"
-                PATCH_COMMAND ""
-                CONFIGURE_COMMAND ""
-                BUILD_COMMAND ${MAKE_EXECUTABLE} -C "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}"
-                BUILD_ALWAYS true
-                INSTALL_COMMAND ""
+            "${TEST_NAME}_Makefile" SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}"
+            PATCH_COMMAND ""
+            CONFIGURE_COMMAND ""
+            BUILD_COMMAND ${MAKE_EXECUTABLE} -C "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}"
+            BUILD_ALWAYS true
+            INSTALL_COMMAND ""
         )
     add_dependencies(${TEST_NAME}  "${TEST_NAME}_Makefile")
     ENDIF ()
     target_compile_options(${TEST_NAME} PRIVATE ${BASE_COMPILE_ARGS})
     target_link_libraries(${TEST_NAME} "lib-${PROJECT_NAME}")
     add_test(NAME ${TEST_NAME}
-            COMMAND ${TEST_NAME}
-            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}
-            )
+        COMMAND ${TEST_NAME}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}
+        )
 ENDFOREACH ()

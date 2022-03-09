@@ -7,9 +7,13 @@
 #include "Poco/Util/OptionException.h"
 #include "certificates.hpp"
 #include "clock.hpp"
+#include "linux-wireguard-manager.hpp"
 #include "public-protocol.hpp"
+#include "server.hpp"
+#include "types.hpp"
 #include "utilities.hpp"
 #include "validators.hpp"
+#include "wireguard.hpp"
 
 #include <Poco/Util/Application.h>
 #include <Poco/Util/HelpFormatter.h>
@@ -19,6 +23,7 @@
 #include <iostream>
 #include <literals.hpp>
 #include <memory>
+#include <stdexcept>
 
 void ServerDaemon::defineOptions(Poco::Util::OptionSet& options) {
 	using Poco::Util::Option;
@@ -133,6 +138,15 @@ void ServerDaemon::defineOptions(Poco::Util::OptionSet& options) {
 	        .repeatable(false)
 	        .argument("ttl")
 	        .binding("psk-ttl"));
+	options.addOption(
+	    Option{ "wireguard-address", "",
+	            "the IP:Port pair to listen on for WireGuard traffic. Should be "
+	            "publicly accessible if other nodes need to"
+	            "connect to it" }
+	        .required(false)
+	        .repeatable(false)
+	        .argument("addr")
+	        .binding("wireguard-address"));
 }
 
 void ServerDaemon::initialize(Poco::Util::Application& self) {
@@ -146,6 +160,29 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 		psk = config().getString("psk");
 		std::cerr << "Using PSK: " << psk.value() << "\n";
 	}
+
+	AbstractWireGuardManager::Key wgPrivateKey;
+	AbstractWireGuardManager::Key wgPublicKey;
+	{
+		wg_key tempWGPrivateKey;
+		wg_generate_private_key(tempWGPrivateKey);
+		std::copy(std::begin(tempWGPrivateKey), std::end(tempWGPrivateKey),
+		          wgPrivateKey.begin());
+		wg_key tempWGPublicKey;
+		wg_generate_public_key(tempWGPublicKey, tempWGPrivateKey);
+		std::copy(std::begin(tempWGPublicKey), std::end(tempWGPublicKey),
+		          wgPublicKey.begin());
+	}
+	const auto userID = base64_encode(
+	    std::span<const std::uint8_t>{ wgPublicKey.data(), wgPublicKey.size() });
+
+	if (!userID) {
+		logger().fatal("Failed to encode WireGuard key for certificate\n");
+		return;
+	}
+
+	std::vector<Node> peers{};
+	std::optional<std::uint64_t> id{};
 
 	if (config().hasOption("server") || !config().hasOption("client")) {
 		logger().notice("Running in root CA mode");
@@ -175,6 +212,7 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 		                std::string{ DEFAULT_CERT_INFO.organisation }),
 		            .commonName = config().getString(
 		                "common-name", std::string{ DEFAULT_CERT_INFO.commonName }),
+		            .userID = userID.value(),
 		            .validityDuration = config().getUInt64(
 		                "validity-duration", DEFAULT_CERT_INFO.validityDuration),
 		        },
@@ -194,32 +232,6 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 			return;
 		}
 
-		std::optional<Poco::Net::IPAddress> parentAddress{};
-		std::optional<std::uint16_t> port;
-
-		const auto tryDecodeIPPortPair =
-		    [](const std::string& addr) -> std::optional<Poco::Net::SocketAddress> {
-			try {
-				return Poco::Net::SocketAddress{ addr };
-			} catch (Poco::Net::InvalidAddressException&) {
-				return std::nullopt;
-			}
-		};
-
-		if (const auto decodedAddr = tryDecodeIPPortPair(parentAddressStr)) {
-			parentAddress = decodedAddr->host();
-			port = decodedAddr->port();
-		} else if (Poco::Net::IPAddress ip{};
-		           Poco::Net::IPAddress::tryParse(parentAddressStr, ip)) {
-			parentAddress = ip;
-		}
-
-		if (!parentAddress) {
-			logger().fatal("Cannot parse parent address '" + parentAddressStr +
-			               "'\n");
-			return;
-		}
-
 		std::uint64_t referringNode{};
 
 		try {
@@ -229,27 +241,22 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 			return;
 		}
 
-		auto csr = CertificateManager::generate_certificate_request(CertificateInfo{
-		    .certificateKeyLength = config().getUInt(
-		        "keylength", DEFAULT_CERT_INFO.certificateKeyLength),
-		    .country = config().getString("country",
-		                                  std::string{ DEFAULT_CERT_INFO.country }),
-		    .province = config().getString(
-		        "province", std::string{ DEFAULT_CERT_INFO.province }),
-		    .city =
-		        config().getString("city", std::string{ DEFAULT_CERT_INFO.city }),
-		    .organisation = config().getString(
-		        "organisation", std::string{ DEFAULT_CERT_INFO.organisation }),
-		    .commonName = config().getString(
-		        "common-name", std::string{ DEFAULT_CERT_INFO.commonName }),
-		    .validityDuration = config().getUInt64(
-		        "validity-duration", DEFAULT_CERT_INFO.validityDuration),
-		});
-
-		if (!csr) {
-			logger().fatal("Couldn't generate certificate signing request\n");
-			return;
-		}
+		CertificateInfo certInfo{
+			.certificateKeyLength =
+			    config().getUInt("keylength", DEFAULT_CERT_INFO.certificateKeyLength),
+			.country = config().getString("country",
+			                              std::string{ DEFAULT_CERT_INFO.country }),
+			.province = config().getString("province",
+			                               std::string{ DEFAULT_CERT_INFO.province }),
+			.city = config().getString("city", std::string{ DEFAULT_CERT_INFO.city }),
+			.organisation = config().getString(
+			    "organisation", std::string{ DEFAULT_CERT_INFO.organisation }),
+			.commonName = config().getString(
+			    "common-name", std::string{ DEFAULT_CERT_INFO.commonName }),
+			.userID = userID.value(),
+			.validityDuration = config().getUInt64(
+			    "validity-duration", DEFAULT_CERT_INFO.validityDuration),
+		};
 
 		// TODO: Replace with parameterised clock.
 		const std::uint64_t timestamp = config().getUInt64(
@@ -269,50 +276,38 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 		std::copy(pskSignatureStr->begin(), pskSignatureStr->end(),
 		          pskSignature.begin());
 
-		// Create initialisation packet before connecting to avoid delays actually
-		// sending the data.
-		const PublicProtocol::InitialisationPacket initPacket{
-			.timestamp = timestamp,
-			.timestampPSKHash = pskHash,
-			.referringNode = referringNode,
-			.timestampPSKSignature = pskSignature,
-			.csr = std::move(csr.value()),
+		PublicProtocol::PublicProtocolClient client{
+			PublicProtocol::PublicProtocolClient::Configuration{
+			    .certInfo = certInfo,
+			    .parentAddress = parentAddressStr,
+			    .pskHash = pskHash,
+			    .pskSignature = pskSignature,
+			    .referringNode = referringNode,
+			    .timestamp = timestamp,
+			}
 		};
 
-		Poco::Net::StreamSocket publicSocket{ Poco::Net::SocketAddress(
-			  { parentAddress.value(),
-			    port.value_or(PublicProtocol::DEFAULT_CONTROL_PLANE_PORT) }) };
-
-		const auto bytes = initPacket.get_bytes();
-
-		assert(bytes.size() < std::numeric_limits<int>::max());
-		publicSocket.sendBytes(bytes.data(), static_cast<int>(bytes.size()));
-		ByteString responseBytes(
-		    PublicProtocol::InitialisationRespPacket::MAX_PACKET_SIZE, '\0');
-
-		assert(responseBytes.size() < std::numeric_limits<int>::max());
-
-		if (publicSocket.receiveBytes(responseBytes.data(),
-		                              static_cast<int>(responseBytes.size())) <
-		    PublicProtocol::InitialisationRespPacket::MIN_PACKET_SIZE) {
-			logger().fatal(
-			    "Failed to receive a valid response from the root server\n");
+		try {
+			const auto resp = client.connect();
+			// TODO: Decode the control-plane pubkey from certificate.
+			peers.push_back(Node{
+			    .id = resp.respondingNode,
+			    .controlPlanePublicKey = {},
+			    .wireGuardPublicKey = resp.respondingWireGuardPublicKey,
+			    .controlPlaneIP = resp.respondingControlPlaneIPAddress,
+			    .wireGuardIP = resp.respondingWireGuardIPAddress,
+			    .controlPlanePort = resp.respondingControlPlanePort,
+			    .wireGuardPort = resp.respondingWireGuardPort,
+			    .controlPlaneCertificate = {},
+			});
+			id = resp.allocatedNode;
+		} catch (const std::invalid_argument& e) {
+			logger().fatal(std::string{ "Invalid argument: " } + e.what() + "\n");
+			return;
+		} catch (const std::runtime_error& e) {
+			logger().fatal(std::string{ "Error: " } + e.what() + "\n");
 			return;
 		}
-
-		const auto response =
-		    PublicProtocol::InitialisationRespPacket::decode_bytes(responseBytes);
-
-		if (!response) {
-			logger().fatal("Response received from the root server was invalid\n");
-		}
-
-		logger().information("I was allocated node: " +
-		                     std::to_string(response->allocatedNode));
-
-		// TODO: Lookup DNS addresses.
-		// TODO: Issue an initialisation request to requested server.
-		// TODO: Use HTTPS / DNS to verify response.
 	}
 
 	// TODO: load private key
@@ -342,17 +337,20 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 	    "psk-ttl", PublicProtocol::PublicProtocolManager::DEFAULT_PSK_TTL);
 
 	server = std::make_unique<Server>(Server::Configuration{
-	    .id = std::nullopt,
+	    .id = id,
 	    .controlPlanePrivateKey = privateKey.value(),
-	    .meshPublicKey = {},
-	    .wireGuardAddress =
-	        Poco::Net::SocketAddress{ "0.0.0.0", DEFAULT_WIREGUARD_PORT },
+	    .meshPublicKey = wgPublicKey,
+	    .meshPrivateKey = wgPrivateKey,
+	    .wireGuardAddress = Poco::Net::SocketAddress{ config().getString(
+	        "wireguard-address",
+	        "0.0.0.0:" + std::to_string(Node::DEFAULT_WIREGUARD_PORT)) },
 	    .publicProtoAddress = publicAddress,
-	    .privateProtoAddress = std::nullopt,
+	    .privateProtoPort = std::nullopt,
 	    .controlPlaneCertificate = certificate,
 	    .psk = config().getString(
 	        "psk", PublicProtocol::PublicProtocolManager::DEFAULT_PSK),
 	    .pskTTL = pskTTL,
+	    .peers = peers,
 	});
 
 	logger().information("Using PSK: " + server->get_psk() + " (valid for " +
@@ -377,6 +375,7 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 		logger().information("I.e.: --timestamp=" + std::to_string(timestamp) +
 		                     " --psk-hash=" + b64EncodedHash.value() +
 		                     " --psk-signature=" + b64EncodedSignature.value() +
+												 " --referrer=" + std::to_string(server->get_self().id) +
 		                     "\n");
 	}
 }
@@ -386,9 +385,9 @@ int ServerDaemon::main(const std::vector<std::string>& args) {
 		return EXIT_FAILURE;
 	}
 
-	const auto execution = server->start();
+	server->start();
 	waitForTerminationRequest();
-	execution.stop();
+	server->stop();
 
 	return EXIT_OK;
 }
@@ -419,3 +418,14 @@ Poco::Util::OptionCallback<ServerDaemon> ServerDaemon::handle_flag() {
 		&ServerDaemon::handle_flag_impl,
 	};
 }
+
+const CertificateInfo ServerDaemon::DEFAULT_CERT_INFO = {
+	.certificateKeyLength = 2048,
+	.country = "UK",
+	.province = "Test Province",
+	.city = "Test City",
+	.organisation = "Test Organisation",
+	.commonName = "Test Common Name",
+	.validityDuration = PublicProtocol::PublicProtocolManager::
+	    DEFAULT_CERTIFICATE_VALIDITY_SECONDS,
+};

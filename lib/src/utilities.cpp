@@ -1,6 +1,9 @@
 #include "utilities.hpp"
+#include "Poco/Net/IPAddress.h"
 #include <bit>
 #include <cassert>
+#include <cstring>
+#include <netinet/in.h>
 #include <openssl/hmac.h>
 #include <span>
 
@@ -147,4 +150,21 @@ bool is_valid_base64_digit(std::uint8_t byte) {
 	return (byte >= '0' && byte <= '9') || (byte >= 'A' && byte <= 'Z') ||
 	       (byte >= 'a' && byte <= 'z') || byte == '+' || byte == '/' ||
 	       byte == '=';
+}
+
+Poco::Net::IPAddress decode_ip_address(const Poco::Net::IPAddress& addr) {
+	if (addr.isIPv4Mapped()) {
+		in_addr ipv4Portion{};
+		const constexpr auto mappedOffset = 12;
+		std::memcpy(&ipv4Portion.s_addr,
+		            reinterpret_cast<const in6_addr*>(addr.addr())->s6_addr +
+		                mappedOffset,
+		            sizeof(ipv4Portion.s_addr));
+
+		// Poco::Net::IPAddress performs memcpy on passed pointer, so no issue using
+		// address of local variable.
+		return Poco::Net::IPAddress{ &ipv4Portion, sizeof(ipv4Portion) };
+	}
+
+	return addr;
 }

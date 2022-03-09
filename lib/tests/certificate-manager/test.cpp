@@ -72,6 +72,7 @@ void generate_certificate() {
 		.city = "",
 		.organisation = "",
 		.commonName = "",
+		.userID = "",
 		.validityDuration = 900,
 	};
 
@@ -87,6 +88,7 @@ void generate_certificate() {
 		.city = "London",
 		.organisation = "Imperial College London",
 		.commonName = "imperial.ac.uk",
+		.userID = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
 		.validityDuration = 900,
 	};
 
@@ -112,6 +114,7 @@ void generate_certificate_request() {
 	        .city = "San Francisco",
 	        .organisation = "Mozilla",
 	        .commonName = "www.mozilla.org",
+					.userID = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
 	        .validityDuration = 60ULL * 60ULL * 24ULL * 365ULL * 10ULL,
 	    });
 

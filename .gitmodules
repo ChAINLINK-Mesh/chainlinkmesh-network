@@ -5,3 +5,6 @@
 	path = dependencies/openssl
 	url = https://github.com/openssl/openssl.git
 	ignore = dirty
+[submodule "dependencies/embeddable-wg-library"]
+	path = dependencies/embeddable-wg-library
+	url = https://git.zx2c4.com/wireguard-tools

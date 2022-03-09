@@ -1,16 +1,23 @@
 #include "public-protocol.hpp"
 #include "certificates.hpp"
+#include "openssl/obj_mac.h"
+#include "openssl/x509.h"
 #include "types.hpp"
 #include "utilities.hpp"
+#include "wireguard.hpp"
 #include <Poco/ByteOrder.h>
+#include <Poco/Net/NetException.h>
 #include <Poco/Net/TCPServer.h>
 #include <cassert>
 #include <chrono>
 #include <ios>
 #include <iostream>
+#include <limits>
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
+#include <random>
+#include <stdexcept>
 #include <utility>
 
 using namespace PublicProtocol;
@@ -18,8 +25,15 @@ using namespace PublicProtocol;
 PublicProtocolManager::PublicProtocolManager(Configuration config)
     : psk{ std::move(config.psk) }, selfNode{ std::move(config.self) },
       controlPlanePrivateKey{ std::move(config.controlPlanePrivateKey) },
-      pskTTL{ config.pskTTL }, clock{ config.clock } {
+      pskTTL{ config.pskTTL }, clock{ config.clock },
+      idDistribution{ Node::generate_id_range() }, randomEngine{
+	      config.randomEngine
+      } {
 	this->nodes.insert(std::make_pair(selfNode.id, selfNode));
+
+	for (const auto& peer : config.peers) {
+		this->nodes.insert(std::make_pair(peer.id, peer));
+	}
 }
 
 std::unique_ptr<Poco::Net::TCPServer>
@@ -265,6 +279,23 @@ PublicProtocolManager::get_signed_psk() const {
 	};
 }
 
+std::vector<Node> PublicProtocolManager::get_peer_nodes() const {
+	std::lock_guard<std::mutex> peerLock{ this->nodesMutex };
+	std::vector<Node> peerNodes{};
+	peerNodes.reserve(this->nodes.size());
+
+	for (const auto& [id, n] : this->nodes) {
+		// Don't return the current node in list of peers.
+		if (id == this->selfNode.id) {
+			continue;
+		}
+
+		peerNodes.push_back(n);
+	}
+
+	return peerNodes;
+}
+
 const std::string PublicProtocolManager::DEFAULT_PSK = "Testing Key";
 
 PublicProtocolManager::PublicProtocolManager(const PublicProtocolManager& other)
@@ -290,7 +321,7 @@ PublicProtocolManager::create_response(InitialisationPacket packet) {
 	// TODO: Complete.
 	return InitialisationRespPacket{
 		.respondingNode = this->selfNode.id,
-		.allocatedNode = /* TODO: Generate a node ID */ 0,
+		.allocatedNode = this->idDistribution(this->randomEngine),
 		.respondingWireGuardPublicKey = this->selfNode.wireGuardPublicKey,
 		.respondingControlPlaneIPAddress = this->selfNode.controlPlaneIP,
 		.respondingWireGuardIPAddress = this->selfNode.wireGuardIP,
@@ -327,6 +358,42 @@ void PublicConnection::run() {
 	if (auto packet = parent.decode_packet(buffer)) {
 		const auto responsePacket =
 		    parent.create_response(std::move(packet.value()));
+
+		// TODO: Discover peer WG pubkey from certificate.
+		auto* const subjectName =
+		    X509_get_subject_name(responsePacket->signedCSR.get());
+		const auto subjectUserIDB64 =
+		    CertificateManager::get_subject_attribute(subjectName, NID_userId);
+
+		// If the isn't a single subject UserID.
+		if (subjectUserIDB64.size() != 1) {
+			std::cerr << "Peer did not specify a single WireGuard public key\n";
+			return;
+		}
+
+		const auto subjectUserID = base64_decode(subjectUserIDB64[0]);
+
+		if (!subjectUserID ||
+		    subjectUserID->size() != AbstractWireGuardManager::WG_PUBKEY_SIZE) {
+			std::cerr << "Peer specified an invalid base-64 user ID\n";
+			return;
+		}
+
+		AbstractWireGuardManager::Key peerWGPubkey = {};
+		std::copy(subjectUserID.value().begin(), subjectUserID.value().end(),
+		          peerWGPubkey.begin());
+
+		// TODO: Don't just rely on the default WireGuard port
+		parent.add_node(Node{
+		    .id = responsePacket->allocatedNode,
+		    .controlPlanePublicKey = {},
+		    .wireGuardPublicKey = peerWGPubkey,
+		    .controlPlaneIP = socket().peerAddress().host(),
+		    .wireGuardIP = socket().peerAddress().host(),
+		    .controlPlanePort = 0,
+		    .wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,
+		    .controlPlaneCertificate = responsePacket->signedCSR,
+		});
 
 		if (responsePacket) {
 			const auto responsePacketBytes = responsePacket->get_bytes();
@@ -451,7 +518,8 @@ InitialisationRespPacket::decode_bytes(const ByteString& bytes) {
 	}
 
 	{
-		const auto respondingWireGuardPublicKeyBytes = read(Node::WG_PUBKEY_SIZE);
+		const auto respondingWireGuardPublicKeyBytes =
+		    read(AbstractWireGuardManager::WG_PUBKEY_SIZE);
 
 		if (!respondingWireGuardPublicKeyBytes) {
 			return std::nullopt;
@@ -474,7 +542,7 @@ InitialisationRespPacket::decode_bytes(const ByteString& bytes) {
 		          respondingControlPlaneIPAddressBytes->end(), addr.s6_addr);
 
 		packet.respondingControlPlaneIPAddress =
-		    Poco::Net::IPAddress{ &addr, sizeof(addr) };
+		    decode_ip_address(Poco::Net::IPAddress{ &addr, sizeof(addr) });
 	}
 
 	{
@@ -489,7 +557,7 @@ InitialisationRespPacket::decode_bytes(const ByteString& bytes) {
 		          respondingWireGuardIPAddressBytes->end(), addr.s6_addr);
 
 		packet.respondingWireGuardIPAddress =
-		    Poco::Net::IPAddress{ &addr, sizeof(addr) };
+		    decode_ip_address(Poco::Net::IPAddress{ &addr, sizeof(addr) });
 	}
 
 	{
@@ -535,4 +603,93 @@ InitialisationRespPacket::decode_bytes(const ByteString& bytes) {
 	}
 
 	return packet;
+}
+
+PublicProtocolClient::PublicProtocolClient(Configuration config)
+    : config{ std::move(config) } {}
+
+InitialisationRespPacket PublicProtocolClient::connect() {
+	std::optional<Poco::Net::IPAddress> parentAddress{};
+	std::optional<std::uint16_t> port;
+
+	const auto tryDecodeIPPortPair =
+	    [](const std::string& addr) -> std::optional<Poco::Net::SocketAddress> {
+		try {
+			return Poco::Net::SocketAddress{ addr };
+		} catch (Poco::Net::InvalidAddressException&) {
+			return std::nullopt;
+		}
+	};
+
+	if (const auto decodedAddr = tryDecodeIPPortPair(config.parentAddress)) {
+		parentAddress = decodedAddr->host();
+		port = decodedAddr->port();
+	} else if (Poco::Net::IPAddress ip{};
+	           Poco::Net::IPAddress::tryParse(config.parentAddress, ip)) {
+		parentAddress = ip;
+	}
+
+	if (!parentAddress) {
+		throw std::invalid_argument{ "Cannot parse parent address '" +
+			                           config.parentAddress + "'" };
+	}
+
+	auto csr = CertificateManager::generate_certificate_request(config.certInfo);
+
+	if (!csr) {
+		throw std::runtime_error{ "Couldn't generate certificate signing request" };
+	}
+
+	// Create initialisation packet before connecting to avoid delays actually
+	// sending the data.
+	const PublicProtocol::InitialisationPacket initPacket{
+		.timestamp = config.timestamp,
+		.timestampPSKHash = config.pskHash,
+		.referringNode = config.referringNode,
+		.timestampPSKSignature = config.pskSignature,
+		.csr = std::move(csr.value()),
+	};
+
+	Poco::Net::StreamSocket publicSocket{ Poco::Net::SocketAddress(
+		  { parentAddress.value(),
+		    port.value_or(PublicProtocol::DEFAULT_CONTROL_PLANE_PORT) }) };
+
+	const auto bytes = initPacket.get_bytes();
+
+	assert(bytes.size() < std::numeric_limits<int>::max());
+	publicSocket.sendBytes(bytes.data(), static_cast<int>(bytes.size()));
+	ByteString responseBytes(
+	    PublicProtocol::InitialisationRespPacket::MAX_PACKET_SIZE, '\0');
+
+	assert(responseBytes.size() < std::numeric_limits<int>::max());
+
+	if (publicSocket.receiveBytes(responseBytes.data(),
+	                              static_cast<int>(responseBytes.size())) <
+	    PublicProtocol::InitialisationRespPacket::MIN_PACKET_SIZE) {
+		throw std::runtime_error{
+			"Failed to receive a valid response from the parent server"
+		};
+	}
+
+	const auto response =
+	    PublicProtocol::InitialisationRespPacket::decode_bytes(responseBytes);
+
+	if (!response) {
+		throw std::runtime_error{
+			"Response received from the parent server was invalid"
+		};
+	}
+
+	std::cerr << "Received response from parent server ("
+	          << response->respondingNode << "), allocated node "
+	          << response->allocatedNode << ".\n"
+	          << "Parent's dataplane IP is "
+	          << response->respondingWireGuardIPAddress.toString() << ":"
+	          << response->respondingWireGuardPort << "\n";
+
+	return response.value();
+
+	// TODO: Lookup DNS addresses.
+	// TODO: Issue an initialisation request to requested server.
+	// TODO: Use HTTPS / DNS to verify response.
 }

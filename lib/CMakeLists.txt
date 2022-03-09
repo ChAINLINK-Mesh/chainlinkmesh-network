@@ -4,32 +4,35 @@ project(lib-wgmesh)
 
 set(SRC_DIRECTORY src)
 set(HEADER_FILES
-        certificates.hpp
-        clock.hpp
-        literals.hpp
-        node.hpp
-        private-protocol.hpp
-        public-protocol.hpp
-        types.hpp
-        utilities.hpp
-        )
+    certificates.hpp
+    clock.hpp
+    literals.hpp
+    node.hpp
+    private-protocol.hpp
+    public-protocol.hpp
+    types.hpp
+    utilities.hpp
+    wireguard.hpp
+    )
 set(SOURCE_FILES
-        certificates.cpp
-        clock.cpp
-        literals.cpp
-        public-protocol.cpp
-        utilities.cpp
-        )
+    certificates.cpp
+    clock.cpp
+    literals.cpp
+    node.cpp
+    public-protocol.cpp
+    utilities.cpp
+    wireguard.cpp
+    )
 
 list(TRANSFORM HEADER_FILES PREPEND "${SRC_DIRECTORY}/")
 list(TRANSFORM SOURCE_FILES PREPEND "${SRC_DIRECTORY}/")
 
 set(BASE_COMPILE_ARGS
-        -Wall
-        -Wextra
-        -Wpedantic
-        -Werror
-        )
+    -Wall
+    -Wextra
+    -Wpedantic
+    -Werror
+    )
 
 add_library(${PROJECT_NAME} SHARED STATIC "${SOURCE_FILES}" "${HEADER_FILES}")
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_INSTALL_PREFIX}/include ${SRC_DIRECTORY})
@@ -45,9 +48,9 @@ if (NOT ${CMAKE_CROSSCOMPILING})
 endif ()
 
 install(TARGETS ${PROJECT_NAME}
-        LIBRARY DESTINATION ${LIB_WGMESH_INSTALL_LIB_DIR}
-        PUBLIC_HEADER DESTINATION ${LIB_WGMESH_INSTALL_LIB_DIR}
-        )
+    LIBRARY DESTINATION ${LIB_WGMESH_INSTALL_LIB_DIR}
+    PUBLIC_HEADER DESTINATION ${LIB_WGMESH_INSTALL_LIB_DIR}
+    )
 
 # Tests
 
@@ -69,19 +72,19 @@ FOREACH (subdir ${SUBDIRS})
     target_include_directories(${subdir} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     IF (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}/Makefile")
         ExternalProject_Add(
-                "${subdir}_Makefile" SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}"
-                PATCH_COMMAND ""
-                CONFIGURE_COMMAND ""
-                BUILD_COMMAND ${MAKE_EXECUTABLE} -C "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}"
-                BUILD_ALWAYS true
-                INSTALL_COMMAND ""
+            "${subdir}_Makefile" SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}"
+            PATCH_COMMAND ""
+            CONFIGURE_COMMAND ""
+            BUILD_COMMAND ${MAKE_EXECUTABLE} -C "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}"
+            BUILD_ALWAYS true
+            INSTALL_COMMAND ""
         )
         add_dependencies(${subdir} "${subdir}_Makefile")
     ENDIF ()
     target_compile_options(${subdir} PRIVATE ${BASE_COMPILE_ARGS})
     target_link_libraries(${subdir} ${PROJECT_NAME})
     add_test(NAME ${subdir}
-            COMMAND ${subdir}
-            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}
-            )
+        COMMAND ${subdir}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}
+        )
 ENDFOREACH ()

@@ -16,7 +16,7 @@ struct Certificate {
 struct CertificateInfo {
 	std::uint32_t certificateKeyLength;
 	// Encoded in UTF-8 format.
-	std::string_view country, province, city, organisation, commonName;
+	std::string country, province, city, organisation, commonName, userID;
 	std::uint64_t validityDuration;
 };
 

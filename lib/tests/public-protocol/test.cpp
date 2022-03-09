@@ -1,10 +1,12 @@
 #include "certificates.hpp"
 #include "clock.hpp"
+#include "wireguard.hpp"
 #include <cassert>
 #include <filesystem>
 #include <fstream>
 #include <openssl/pem.h>
 #include <public-protocol.hpp>
+#include <random>
 #include <string>
 #include <test.hpp>
 
@@ -142,7 +144,7 @@ PublicProtocolManager get_testing_protocol_manager() {
 	const auto wireguardPubkeyFile = trim(read_file("wireguard-pubkey.key"));
 	const auto wireguardPubkeyBytes = base64_decode(wireguardPubkeyFile);
 	assert(wireguardPubkeyBytes.has_value());
-	Node::WireGuardPublicKey wireguardPubkey{};
+	AbstractWireGuardManager::Key wireguardPubkey{};
 	std::copy(wireguardPubkeyBytes->begin(), wireguardPubkeyBytes->end(),
 	          wireguardPubkey.begin());
 	const auto certificateBytes = read_file("legitimate-ca.pem");
@@ -171,6 +173,8 @@ PublicProtocolManager get_testing_protocol_manager() {
 		  .pskTTL = 100,
 		  .clock = std::make_shared<TestClock>(std::chrono::seconds{
 		      123456789 }), // I.e. the same second the PSK was generated
+			.peers = {},
+			.randomEngine = std::default_random_engine{ std::random_device{}() },
 	} };
 
 	return protocolManager;

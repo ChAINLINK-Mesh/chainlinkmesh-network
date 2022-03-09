@@ -97,3 +97,5 @@ bool is_valid_base64_digit(std::uint8_t byte);
 
 std::string trim(const std::string_view& string);
 ByteString trim(const ByteStringView& string);
+
+Poco::Net::IPAddress decode_ip_address(const Poco::Net::IPAddress& addr);

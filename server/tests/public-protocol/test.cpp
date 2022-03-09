@@ -1,6 +1,7 @@
 #include "test.hpp"
 #include "certificates.hpp"
 #include "types.hpp"
+#include "wireguard.hpp"
 #include <Poco/FIFOBuffer.h>
 #include <Poco/Net/NetException.h>
 #include <Poco/Net/StreamSocket.h>
@@ -20,7 +21,7 @@ void test() {
 }
 
 void check_open_status(Server& server) {
-	auto serverExecution = server.start();
+	server.start();
 
 	Poco::Net::StreamSocket publicSocket{};
 
@@ -43,7 +44,7 @@ void check_open_status(Server& server) {
 		throw "Public protocol did not respond to valid initialisation request";
 	}
 
-	serverExecution.stop();
+	server.stop();
 }
 
 Server::Configuration get_config(const TestPorts& testPorts) {
@@ -57,7 +58,7 @@ Server::Configuration get_config(const TestPorts& testPorts) {
 	    base64_decode(trim(read_file("wireguard-pubkey.key")));
 	assert(wireGuardPublicKeyBytes.has_value());
 
-	Node::WireGuardPublicKey wireGuardPublicKey{};
+	AbstractWireGuardManager::Key wireGuardPublicKey{};
 	assert(wireGuardPublicKeyBytes->size() == wireGuardPublicKey.size());
 	std::copy(wireGuardPublicKeyBytes->begin(), wireGuardPublicKeyBytes->end(),
 	          wireGuardPublicKey.begin());
@@ -74,7 +75,7 @@ Server::Configuration get_config(const TestPorts& testPorts) {
 		.meshPublicKey = wireGuardPublicKey,
 		.wireGuardAddress = testPorts.wireGuardAddress,
 		.publicProtoAddress = testPorts.publicProtoAddress,
-		.privateProtoAddress = testPorts.privateProtoAddress,
+		.privateProtoPort = testPorts.privateProtoAddress.port(),
 		.controlPlaneCertificate = X509_RAII{ PEM_read_bio_X509(
 		    caCertBio.get(), nullptr, nullptr, nullptr) },
 		.psk = std::nullopt,

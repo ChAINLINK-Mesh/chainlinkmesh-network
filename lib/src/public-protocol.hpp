@@ -4,11 +4,14 @@
 #include "clock.hpp"
 #include "node.hpp"
 #include "utilities.hpp"
+#include "wireguard.hpp"
+#include <Poco/Logger.h>
 #include <Poco/Net/TCPServer.h>
 #include <concepts>
 #include <map>
 #include <mutex>
 #include <optional>
+#include <random>
 #include <span>
 
 namespace PublicProtocol {
@@ -34,7 +37,6 @@ namespace PublicProtocol {
 		Hash timestampPSKHash;
 		std::uint64_t referringNode;
 		Signature timestampPSKSignature;
-		// TODO: Require UNSTRUCTUREDNAME to be the node's ID
 		// TODO: Require UNSTRUCTUREDADDRESS to be the node's WireGuard public key
 		X509_REQ_RAII csr;
 
@@ -52,7 +54,7 @@ namespace PublicProtocol {
 	};
 
 	struct InitialisationRespPacket {
-		using WireGuardPublicKey = Node::WireGuardPublicKey;
+		using WireGuardPublicKey = AbstractWireGuardManager::Key;
 
 		std::uint64_t respondingNode;
 		std::uint64_t allocatedNode;
@@ -68,8 +70,9 @@ namespace PublicProtocol {
 		decode_bytes(const ByteString& bytes);
 
 		const constexpr static std::uint16_t MIN_PACKET_SIZE =
-		    sizeof(respondingNode) + sizeof(allocatedNode) + Node::WG_PUBKEY_SIZE +
-		    IPV6_ADDR_SIZE + IPV6_ADDR_SIZE + sizeof(respondingControlPlanePort) +
+		    sizeof(respondingNode) + sizeof(allocatedNode) +
+		    AbstractWireGuardManager::WG_PUBKEY_SIZE + IPV6_ADDR_SIZE +
+		    IPV6_ADDR_SIZE + sizeof(respondingControlPlanePort) +
 		    sizeof(respondingWireGuardPort);
 		const constexpr static std::uint16_t MAX_PACKET_SIZE =
 		    MIN_PACKET_SIZE + MAX_CSR_SIZE;
@@ -85,6 +88,8 @@ namespace PublicProtocol {
 			EVP_PKEY_RAII controlPlanePrivateKey;
 			std::uint64_t pskTTL;
 			Clock clock;
+			std::vector<Node> peers;
+			std::default_random_engine randomEngine;
 		};
 
 		PublicProtocolManager(Configuration config);
@@ -100,9 +105,9 @@ namespace PublicProtocol {
 		std::optional<InitialisationRespPacket>
 		create_response(InitialisationPacket packet);
 
-		bool add_node(const Node& node);
+		virtual bool add_node(const Node& node);
 		std::optional<Node> get_node(std::uint64_t nodeID) const;
-		bool delete_node(const Node& node);
+		virtual bool delete_node(const Node& node);
 
 		// TODO: Review this validity period.
 		static const constexpr std::uint64_t DEFAULT_CERTIFICATE_VALIDITY_SECONDS =
@@ -111,6 +116,8 @@ namespace PublicProtocol {
 		std::string get_psk() const;
 		std::optional<std::tuple<std::uint64_t, SHA256_Hash, SHA256_Signature>>
 		get_signed_psk() const;
+
+		std::vector<Node> get_peer_nodes() const;
 
 		const constexpr static std::uint64_t DEFAULT_PSK_TTL = 120;
 		static const std::string DEFAULT_PSK;
@@ -121,6 +128,8 @@ namespace PublicProtocol {
 		const EVP_PKEY_RAII controlPlanePrivateKey;
 		std::uint64_t pskTTL;
 		const Clock clock;
+		std::uniform_int_distribution<std::uint64_t> idDistribution;
+		std::default_random_engine randomEngine;
 
 		mutable std::mutex nodesMutex;
 		std::map<std::uint64_t, Node> nodes;
@@ -152,5 +161,23 @@ namespace PublicProtocol {
 
 	protected:
 		PublicProtocolManager& parent;
+	};
+
+	class PublicProtocolClient {
+	public:
+		struct Configuration {
+			CertificateInfo certInfo;
+			std::string parentAddress;
+			PublicProtocol::InitialisationPacket::Hash pskHash;
+			PublicProtocol::InitialisationPacket::Signature pskSignature;
+			std::uint64_t referringNode;
+			std::uint64_t timestamp;
+		};
+
+		PublicProtocolClient(Configuration config);
+		InitialisationRespPacket connect();
+
+	protected:
+		Configuration config;
 	};
 } // namespace PublicProtocol

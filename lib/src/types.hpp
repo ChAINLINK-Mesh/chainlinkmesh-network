@@ -30,10 +30,15 @@ struct CopyableUniquePtr : public std::unique_ptr<Type, Deleter> {
 	    : std::unique_ptr<Type, Deleter>{ Copier{}(other.get()) } {}
 
 	CopyableUniquePtr(CopyableUniquePtr<Type, Deleter, Copier>&& other) noexcept(
-	    noexcept(std::unique_ptr<Type, Deleter>(std::move(other))))
+	    noexcept(std::unique_ptr<Type, Deleter>{ std::move(other) }))
 	    : std::unique_ptr<Type, Deleter>{ std::move(other) } {}
 
-	using std::unique_ptr<Type, Deleter>::unique_ptr;
+	CopyableUniquePtr(Type* value) noexcept(
+	    noexcept(std::unique_ptr<Type, Deleter>{ value }))
+	    : std::unique_ptr<Type, Deleter>{ value } {}
+
+	CopyableUniquePtr() noexcept(noexcept(std::unique_ptr<Type, Deleter>{}))
+	    : std::unique_ptr<Type, Deleter>{} {}
 
 	CopyableUniquePtr<Type, Deleter, Copier>&
 	operator=(const CopyableUniquePtr<Type, Deleter, Copier>& other) noexcept(

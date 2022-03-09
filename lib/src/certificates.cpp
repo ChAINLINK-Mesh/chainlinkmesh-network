@@ -1,5 +1,7 @@
 #include "certificates.hpp"
 #include "debug.h"
+#include "openssl/asn1.h"
+#include "openssl/err.h"
 #include "types.hpp"
 #include "utilities.hpp"
 #include <cassert>
@@ -425,7 +427,9 @@ bool CertificateManager::x509_set_name_from_certificate_info(
 	assert(certificateInfo.city.size() < std::numeric_limits<int>::max());
 	assert(certificateInfo.organisation.size() < std::numeric_limits<int>::max());
 	assert(certificateInfo.commonName.size() < std::numeric_limits<int>::max());
+	assert(certificateInfo.userID.size() < std::numeric_limits<int>::max());
 
+	// TODO: Replace the string codes with their enumerated versions
 	if (X509_NAME_add_entry_by_txt(
 	        x509Name, "C", MBSTRING_UTF8,
 	        reinterpret_cast<const unsigned char*>(
@@ -463,6 +467,13 @@ bool CertificateManager::x509_set_name_from_certificate_info(
 	        reinterpret_cast<const unsigned char*>(
 	            certificateInfo.commonName.data()),
 	        static_cast<int>(certificateInfo.commonName.length()), -1, 0) != 1) {
+		return false;
+	}
+
+	if (X509_NAME_add_entry_by_NID(
+	        x509Name, NID_userId, MBSTRING_UTF8,
+	        reinterpret_cast<const unsigned char*>(certificateInfo.userID.data()),
+	        static_cast<int>(certificateInfo.userID.length()), -1, 0) != 1) {
 		return false;
 	}
 

@@ -28,16 +28,7 @@ protected:
 	void handle_flag_impl(const std::string& flag, const std::string&);
 
 	const constexpr static std::uint16_t DEFAULT_WIREGUARD_PORT = 51820;
-	const constexpr static CertificateInfo DEFAULT_CERT_INFO = {
-		.certificateKeyLength = 2048,
-		.country = "UK",
-		.province = "Test Province",
-		.city = "Test City",
-		.organisation = "Test Organisation",
-		.commonName = "Test Common Name",
-		.validityDuration = PublicProtocol::PublicProtocolManager::
-		    DEFAULT_CERTIFICATE_VALIDITY_SECONDS,
-	};
+	const static CertificateInfo DEFAULT_CERT_INFO;
 
 private:
 	const constexpr static std::uint32_t ONE_DAY_IN_SECS = 60 * 60 * 24;
