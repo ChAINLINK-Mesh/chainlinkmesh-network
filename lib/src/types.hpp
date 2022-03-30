@@ -4,8 +4,11 @@
 #include <concepts>
 #include <cstdint>
 #include <memory>
-#include <openssl/x509.h>
 #include <string>
+
+extern "C" {
+#include <openssl/x509.h>
+};
 
 using ByteString = std::basic_string<std::uint8_t>;
 using ByteStringView = std::basic_string_view<std::uint8_t>;

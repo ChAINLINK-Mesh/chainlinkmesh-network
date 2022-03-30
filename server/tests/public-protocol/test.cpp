@@ -73,6 +73,7 @@ Server::Configuration get_config(const TestPorts& testPorts) {
 		.id = 987654321,
 		.controlPlanePrivateKey = controlPlanePrivateKey.value(),
 		.meshPublicKey = wireGuardPublicKey,
+		.meshPrivateKey = {},
 		.wireGuardAddress = testPorts.wireGuardAddress,
 		.publicProtoAddress = testPorts.publicProtoAddress,
 		.privateProtoPort = testPorts.privateProtoAddress.port(),
@@ -83,5 +84,7 @@ Server::Configuration get_config(const TestPorts& testPorts) {
 		.clock = std::make_shared<TestClock>(
 		    std::chrono::seconds{ 123456789 }), // i.e. the same second the PSK was
 		                                        // generated
+		.peers = {},
+		.randomEngine = std::nullopt,
 	};
 }

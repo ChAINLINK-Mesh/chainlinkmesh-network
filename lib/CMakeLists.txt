@@ -34,12 +34,18 @@ set(BASE_COMPILE_ARGS
     -Werror
     )
 
-add_library(${PROJECT_NAME} SHARED STATIC "${SOURCE_FILES}" "${HEADER_FILES}")
+add_library(${PROJECT_NAME} STATIC "${SOURCE_FILES}" "${HEADER_FILES}")
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_INSTALL_PREFIX}/include ${SRC_DIRECTORY})
 target_compile_options(${PROJECT_NAME} PRIVATE ${BASE_COMPILE_ARGS})
 set_target_properties(${PROJECT_NAME} PROPERTIES PUBLIC_HEADER "${HEADER_FILES}")
 target_link_directories(${PROJECT_NAME} PUBLIC ${CMAKE_INSTALL_PREFIX}/lib)
-target_link_libraries(${PROJECT_NAME} PUBLIC Poco::Net crypto pthread)
+target_link_libraries(${PROJECT_NAME} PUBLIC Poco::Net pthread)
+
+if (DEFINED ${BUILD_SHARED_LIBS} AND NOT ${BUILD_SHARED_LIBS})
+    target_link_libraries(${PROJECT_NAME} PUBLIC crypto.a)
+else ()
+    target_link_libraries(${PROJECT_NAME} PUBLIC crypto.so)
+endif ()
 
 # TODO: Replace with proper check for available UBSAN lib.
 if (NOT ${CMAKE_CROSSCOMPILING})

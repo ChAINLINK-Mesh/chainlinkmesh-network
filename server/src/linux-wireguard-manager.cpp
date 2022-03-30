@@ -1,6 +1,5 @@
 #include "linux-wireguard-manager.hpp"
 #include "utilities.hpp"
-#include "wireguard.h"
 #include "wireguard.hpp"
 #include <Poco/Net/IPAddress.h>
 #include <Poco/Net/SocketAddress.h>
@@ -19,6 +18,7 @@ extern "C" {
 #include <net/if.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <wireguard.h>
 }
 
 static_assert(sizeof(wg_device::public_key) ==

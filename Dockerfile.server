@@ -1,0 +1,16 @@
+FROM debian:bookworm AS build
+
+RUN apt-get update && apt-get upgrade -y
+RUN apt-get install -y g++ curl git cmake
+RUN mkdir -p /src/dependencies /src/lib /src/server /build
+COPY ./dependencies /src/dependencies/
+COPY ./lib /src/lib/
+COPY ./server /src/server/
+COPY ./CMakeLists.txt /src/CMakeLists.txt
+RUN cd /build && cmake -DCMAKE_BUILD_TYPE=Debug -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF /src
+RUN cd /build && cmake --build .
+
+FROM debian:bookworm
+RUN apt-get update && apt-get install -y libubsan1
+COPY --from=build /build/server/wgmesh-server /usr/bin/wgmesh-server
+CMD [ "/usr/bin/wgmesh-server" ]
