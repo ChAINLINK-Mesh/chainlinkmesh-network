@@ -30,6 +30,11 @@ protected:
 	const constexpr static std::uint16_t DEFAULT_WIREGUARD_PORT = 51820;
 	const static CertificateInfo DEFAULT_CERT_INFO;
 
+	/**
+	 * @shouldExit Set when processing help options.
+	 */
+	bool shouldExit = false;
+
 private:
 	const constexpr static std::uint32_t ONE_DAY_IN_SECS = 60 * 60 * 24;
 

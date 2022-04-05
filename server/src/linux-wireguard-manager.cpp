@@ -142,7 +142,7 @@ void LinuxWireGuardManager::setup_interface() {
 
 	struct in6_ifreq ifr6 {
 		.ifr6_addr = *reinterpret_cast<const in6_addr*>(ownIP.addr()),
-		.ifr6_prefixlen = ownIP.prefixLength(), .ifr6_ifindex = ifr.ifr_ifindex,
+		.ifr6_prefixlen = Node::CHAINLINK_NET_PREFIX_BITS, .ifr6_ifindex = ifr.ifr_ifindex,
 	};
 
 	// TODO: May be unhappy that socket is IPv6
@@ -176,16 +176,6 @@ void LinuxWireGuardManager::setup_interface() {
 		throw std::runtime_error{ "Failed to set WG interface up: " +
 			                        std::to_string(-res) };
 	};
-
-	// const auto tmpSocket = std::unique_ptr<int, FunctionDeleter<close>>{ new
-	// int{ 	  socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE) } }; if (*tmpSocket <
-	// 0) {
-	//	throw std::runtime_error{
-	//		"Failed to create temporary socket for configuring WG interface"
-	//	};
-	//}
-
-	// rtattr attr;
 
 	interfaceUp = true;
 }
@@ -369,7 +359,7 @@ wg_peer* LinuxWireGuardManager::wg_peer_from_peer(const Peer& peer) {
 	auto* const ip = new wg_allowedip{
 		.family = static_cast<std::uint16_t>(peer.internalAddress.af()),
 		.ip6 = {},
-		.cidr = static_cast<std::uint8_t>(peer.internalAddress.prefixLength()),
+		.cidr = 128,
 		.next_allowedip = nullptr,
 	};
 

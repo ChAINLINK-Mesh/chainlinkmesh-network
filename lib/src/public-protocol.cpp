@@ -621,7 +621,8 @@ InitialisationRespPacket PublicProtocolClient::connect() {
 		}
 	};
 
-	if (const auto decodedAddr = tryDecodeIPPortPair(config.parentAddress)) {
+	const auto decodedAddr = tryDecodeIPPortPair(config.parentAddress);
+	if (decodedAddr) {
 		parentAddress = decodedAddr->host();
 		port = decodedAddr->port();
 	} else if (Poco::Net::IPAddress ip{};
@@ -671,13 +672,19 @@ InitialisationRespPacket PublicProtocolClient::connect() {
 		};
 	}
 
-	const auto response =
+	auto response =
 	    PublicProtocol::InitialisationRespPacket::decode_bytes(responseBytes);
 
 	if (!response) {
 		throw std::runtime_error{
 			"Response received from the parent server was invalid"
 		};
+	}
+
+	// If parent is listening on all IPs (i.e. a global address of ::/0 or 0.0.0.0/0), then use the address we connected
+	// // to them with instead.
+	if (response->respondingWireGuardIPAddress.prefixLength() == 0) {
+		response->respondingWireGuardIPAddress = decodedAddr.value().host();
 	}
 
 	std::cerr << "Received response from parent server ("

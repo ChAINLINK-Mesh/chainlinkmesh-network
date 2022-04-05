@@ -43,8 +43,15 @@ target_link_libraries(${PROJECT_NAME} PUBLIC Poco::Net pthread)
 
 if (DEFINED ${BUILD_SHARED_LIBS} AND NOT ${BUILD_SHARED_LIBS})
     target_link_libraries(${PROJECT_NAME} PUBLIC crypto.a)
+    message(STATUS "Using static SSL lib: ${BUILD_SHARED_LIBS} and ${DEF}")
 else ()
     target_link_libraries(${PROJECT_NAME} PUBLIC crypto.so)
+    if (DEFINED ${BUILD_SHARED_LIBS})
+        set(DEF "ON")
+    else ()
+        set(DEF "OFF")
+    endif ()
+    message(STATUS "Using dynamic SSL lib: ${BUILD_SHARED_LIBS} and defined: ${DEF}")
 endif ()
 
 # TODO: Replace with proper check for available UBSAN lib.

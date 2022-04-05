@@ -17,8 +17,8 @@ option(BUILD_SHARED_LIBS "Whether to build dynamically-linked binaries and libra
 
 set(OPENSSL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/dependencies/openssl)
 if (NOT ${BUILD_SHARED_LIBS})
-    set(OPENSSL_USE_STATIC_LIBS TRUE)
     set(OPENSSL_ADDITIONAL_CONFIG_ARG "no-shared")
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "")
 endif ()
 ExternalProject_Add(OpenSSL SOURCE_DIR ${OPENSSL_DIR}
     PATCH_COMMAND ""

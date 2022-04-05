@@ -25,6 +25,8 @@
 #include <memory>
 #include <stdexcept>
 
+const constexpr std::string_view SERVER_IP_PLACEHOLDER = "SERVER_IP_HERE";
+
 void ServerDaemon::defineOptions(Poco::Util::OptionSet& options) {
 	using Poco::Util::Option;
 	using Poco::Util::OptionCallback;
@@ -141,7 +143,7 @@ void ServerDaemon::defineOptions(Poco::Util::OptionSet& options) {
 	options.addOption(
 	    Option{ "wireguard-address", "",
 	            "the IP:Port pair to listen on for WireGuard traffic. Should be "
-	            "publicly accessible if other nodes need to"
+	            "publicly accessible if other nodes need to "
 	            "connect to it" }
 	        .required(false)
 	        .repeatable(false)
@@ -151,6 +153,10 @@ void ServerDaemon::defineOptions(Poco::Util::OptionSet& options) {
 
 void ServerDaemon::initialize(Poco::Util::Application& self) {
 	Poco::Util::ServerApplication::initialize(self);
+
+	if (shouldExit) {
+		return;
+	}
 
 	X509_RAII certificate{};
 
@@ -225,11 +231,20 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 	} else {
 		logger().notice("Running in client mode");
 
-		const auto parentAddressStr = config().getString("parent");
+		auto parentAddressStr = config().getString("parent");
 
 		if (parentAddressStr.empty()) {
 			logger().fatal("Cannot connect to blank parent\n");
 			return;
+		}
+
+		// If the user has failed to replace the placeholder parameter from the
+		// invite.
+		if (parentAddressStr.starts_with(SERVER_IP_PLACEHOLDER)) {
+			std::cerr << "IP address of parent: ";
+			std::string parentIP{};
+			std::cin >> parentIP;
+			parentAddressStr.replace(0, SERVER_IP_PLACEHOLDER.length(), parentIP);
 		}
 
 		std::uint64_t referringNode{};
@@ -372,11 +387,17 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 		logger().information("\tPSK Hash: " + b64EncodedHash.value());
 		logger().information("\tPSK Signature: " + b64EncodedSignature.value() +
 		                     "\n");
-		logger().information("I.e.: --timestamp=" + std::to_string(timestamp) +
-		                     " --psk-hash=" + b64EncodedHash.value() +
-		                     " --psk-signature=" + b64EncodedSignature.value() +
-												 " --referrer=" + std::to_string(server->get_self().id) +
-		                     "\n");
+		logger().information(
+		    "I.e.: docker run --network=host --cap-add=NET_ADMIN -it "
+		    "michaelkuc6/wgmesh-server wgmesh-server"
+		    " \\\n\t--timestamp=" +
+		    std::to_string(timestamp) +
+		    " \\\n\t--psk-hash=" + b64EncodedHash.value() +
+		    " \\\n\t--psk-signature=" + b64EncodedSignature.value() +
+		    " \\\n\t--psk-ttl=" + std::to_string(pskTTL) +
+		    " \\\n\t--referrer=" + std::to_string(server->get_self().id) +
+		    " \\\n\t--client=" + std::string{ SERVER_IP_PLACEHOLDER } + ":" +
+		    std::to_string(server->get_public_proto_address().port()) + "\n");
 	}
 }
 
@@ -404,6 +425,7 @@ void ServerDaemon::handle_help(const std::string& /*unused*/,
                                const std::string& /*unused*/) {
 	display_help();
 	stopOptionsProcessing();
+	shouldExit = true;
 	terminate();
 }
 
