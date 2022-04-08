@@ -1,10 +1,4 @@
 #include "app.hpp"
-#include "Poco/Net/IPAddress.h"
-#include "Poco/Net/NetException.h"
-#include "Poco/Net/SocketAddress.h"
-#include "Poco/Net/StreamSocket.h"
-#include "Poco/Util/IntValidator.h"
-#include "Poco/Util/OptionException.h"
 #include "certificates.hpp"
 #include "clock.hpp"
 #include "linux-wireguard-manager.hpp"
@@ -15,8 +9,14 @@
 #include "validators.hpp"
 #include "wireguard.hpp"
 
+#include <Poco/Net/IPAddress.h>
+#include <Poco/Net/NetException.h>
+#include <Poco/Net/SocketAddress.h>
+#include <Poco/Net/StreamSocket.h>
 #include <Poco/Util/Application.h>
 #include <Poco/Util/HelpFormatter.h>
+#include <Poco/Util/IntValidator.h>
+#include <Poco/Util/OptionException.h>
 #include <Poco/Util/ServerApplication.h>
 #include <chrono>
 #include <cstdlib>

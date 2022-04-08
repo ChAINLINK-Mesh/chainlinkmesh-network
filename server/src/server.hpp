@@ -17,8 +17,7 @@ class LinuxPublicProtocolManager
 public:
 	LinuxPublicProtocolManager(
 	    Configuration config,
-	    std::function<bool(const Node& node)>
-	        addNodeCallback);
+	    std::function<bool(const Node& node)> addNodeCallback);
 
 	bool add_node(const Node& node) override;
 
@@ -106,14 +105,17 @@ public:
 		/**
 		 * The list of peer nodes which should be have connections established to.
 		 *
-		 * An empty list is useful if this node is the root CA, and hence has no peers yet.
+		 * An empty list is useful if this node is the root CA, and hence has no
+		 * peers yet.
 		 */
 		std::vector<Node> peers;
 
 		/**
-		 * The source of random value generation. Allows encapsulating randomness within tests.
+		 * The source of random value generation. Allows encapsulating randomness
+		 * within tests.
 		 *
-		 * A value of std::nullopt implies that a randomly seeded generator shall be used.
+		 * A value of std::nullopt implies that a randomly seeded generator shall be
+		 * used.
 		 */
 		std::optional<std::default_random_engine> randomEngine;
 	};

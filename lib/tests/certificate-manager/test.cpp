@@ -114,7 +114,7 @@ void generate_certificate_request() {
 	        .city = "San Francisco",
 	        .organisation = "Mozilla",
 	        .commonName = "www.mozilla.org",
-					.userID = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
+	        .userID = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
 	        .validityDuration = 60ULL * 60ULL * 24ULL * 365ULL * 10ULL,
 	    });
 

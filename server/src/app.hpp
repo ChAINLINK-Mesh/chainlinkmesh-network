@@ -1,10 +1,10 @@
 #pragma once
 
-#include "Poco/Util/AbstractConfiguration.h"
-#include "Poco/Util/OptionCallback.h"
 #include "public-protocol.hpp"
 #include "server.hpp"
+#include <Poco/Util/AbstractConfiguration.h>
 #include <Poco/Util/Application.h>
+#include <Poco/Util/OptionCallback.h>
 #include <Poco/Util/OptionSet.h>
 #include <Poco/Util/ServerApplication.h>
 #include <memory>

@@ -142,7 +142,8 @@ void LinuxWireGuardManager::setup_interface() {
 
 	struct in6_ifreq ifr6 {
 		.ifr6_addr = *reinterpret_cast<const in6_addr*>(ownIP.addr()),
-		.ifr6_prefixlen = Node::CHAINLINK_NET_PREFIX_BITS, .ifr6_ifindex = ifr.ifr_ifindex,
+		.ifr6_prefixlen = Node::CHAINLINK_NET_PREFIX_BITS,
+		.ifr6_ifindex = ifr.ifr_ifindex,
 	};
 
 	// TODO: May be unhappy that socket is IPv6

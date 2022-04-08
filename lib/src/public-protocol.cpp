@@ -681,7 +681,8 @@ InitialisationRespPacket PublicProtocolClient::connect() {
 		};
 	}
 
-	// If parent is listening on all IPs (i.e. a global address of ::/0 or 0.0.0.0/0), then use the address we connected
+	// If parent is listening on all IPs (i.e. a global address of ::/0 or
+	// 0.0.0.0/0), then use the address we connected
 	// // to them with instead.
 	if (response->respondingWireGuardIPAddress.prefixLength() == 0) {
 		response->respondingWireGuardIPAddress = decodedAddr.value().host();

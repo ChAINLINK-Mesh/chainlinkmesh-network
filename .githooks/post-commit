@@ -1,0 +1,50 @@
+#!/usr/bin/env sh
+
+function check_poco_includes {
+	grep -ral '#include "Poco' "${1}"
+}
+
+function check_file_permissions {
+	find "${1}" -type f -perm /1
+}
+
+function check_formatting {
+	EXTENSIONS=(c cpp h hpp)
+
+	for EXT in "${EXTENSIONS[@]}"; do
+		find "${1}" -name "*.${EXT}" -type f | while read -r SRC_FILE; do
+			clang-format --dry-run --Werror "${SRC_FILE}" 2>/dev/null
+			[[ $? -ne 0 ]] && printf '%s\n' "${SRC_FILE}"
+		done
+	done
+}
+
+CHECKS=(check_poco_includes check_file_permissions check_formatting)
+DIRS=(lib server)
+EXIT_CODE=0
+CHECK_I=0
+
+while [[ ${CHECK_I} -lt ${#CHECKS[@]} ]]; do
+	CHECK="${CHECKS[CHECK_I]}"
+	typeset -a ALL_DIR_VIOLATIONS
+
+	for DIR in ${DIRS[@]}; do
+		IFS="$(printf '\n')"
+		VIOLATIONS="$(${CHECK} "${DIR}")"
+		ALL_DIR_VIOLATIONS=( ${ALL_DIR_VIOLATIONS[@]} ${VIOLATIONS[@]} )
+		unset IFS
+	done
+
+	if [[ ! -z "${ALL_DIR_VIOLATIONS}" ]]; then
+		printf 'Failed %s:\n' "${CHECK}"
+
+		for VIOLATION in ${ALL_DIR_VIOLATIONS[@]}; do
+			printf '\t%s\n' "${VIOLATION}"
+		done
+	fi
+
+	let CHECK_I=CHECK_I+1
+	ALL_DIR_VIOLATIONS=()
+done
+
+exit ${EXIT_CODE}

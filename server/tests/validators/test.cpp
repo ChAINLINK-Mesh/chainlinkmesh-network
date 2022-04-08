@@ -1,7 +1,7 @@
 #include "test.hpp"
-#include "Poco/Util/Option.h"
-#include "Poco/Util/OptionException.h"
 #include "validators.hpp"
+#include <Poco/Util/Option.h>
+#include <Poco/Util/OptionException.h>
 #include <stdexcept>
 
 void test_power_of_two();

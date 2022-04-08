@@ -155,9 +155,10 @@ bool Server::add_node(const Node& node) {
 
 	execution->wgManager.add_peer(AbstractWireGuardManager::Peer{
 	    .publicKey = node.wireGuardPublicKey,
-			// We cannot be sure about where nodes will connect from if we are the server.
+	    // We cannot be sure about where nodes will connect from if we are the
+	    // server.
 	    .endpoint = std::nullopt,
-	        //Poco::Net::SocketAddress{ node.wireGuardIP, node.wireGuardPort },
+	    // Poco::Net::SocketAddress{ node.wireGuardIP, node.wireGuardPort },
 	    .internalAddress =
 	        AbstractWireGuardManager::get_internal_ip_address(node.id),
 	});
