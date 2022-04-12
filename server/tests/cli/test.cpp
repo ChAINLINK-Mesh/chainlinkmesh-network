@@ -16,7 +16,6 @@ void test_cli_flags() {
 	std::vector<std::pair<std::string, std::optional<std::string>>> flags{
 		{ "help", std::nullopt },
 		{ "server", std::nullopt },
-		{ "keylength", "control-plane key length" },
 		{ "country", "control-plane certificate country" },
 		{ "province", "control-plane certificate province" },
 		{ "city", "control-plane certificate city" },

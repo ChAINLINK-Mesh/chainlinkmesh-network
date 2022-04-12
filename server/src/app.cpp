@@ -74,14 +74,6 @@ void ServerDaemon::defineOptions(Poco::Util::OptionSet& options) {
 	                      .binding("server")
 	                      .callback(handle_flag()));
 	options.addOption(
-	    Option{ "keylength", "", "the length of ChAINLINK RSA key to use" }
-	        .required(false)
-	        .repeatable(false)
-	        .argument("length", true)
-	        .binding("keylength")
-	        .validator(
-	            new PowerOfTwoValidator{ MIN_KEY_LENGTH, MAX_KEY_LENGTH }));
-	options.addOption(
 	    Option{ "country", "",
 	            "which country the certificate should use (ISO 3166-1 alpha-2)" }
 	        .required(false)
@@ -193,11 +185,8 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 	if (config().hasOption("server") || !config().hasOption("client")) {
 		logger().notice("Running in root CA mode");
 
-		const auto keyLength =
-		    config().getUInt("keylength", DEFAULT_CERT_INFO.certificateKeyLength);
-
 		// Generate RSA key
-		auto rsaKey = CertificateManager::generate_rsa_key(keyLength);
+		auto rsaKey = CertificateManager::generate_rsa_key();
 
 		if (!rsaKey) {
 			logger().fatal("Failed to generate server CA key\n");
@@ -206,7 +195,6 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 
 		if (auto tempCertificate = CertificateManager::generate_certificate(
 		        CertificateInfo{
-		            .certificateKeyLength = keyLength,
 		            .country = config().getString(
 		                "country", std::string{ DEFAULT_CERT_INFO.country }),
 		            .province = config().getString(
@@ -257,8 +245,6 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 		}
 
 		CertificateInfo certInfo{
-			.certificateKeyLength =
-			    config().getUInt("keylength", DEFAULT_CERT_INFO.certificateKeyLength),
 			.country = config().getString("country",
 			                              std::string{ DEFAULT_CERT_INFO.country }),
 			.province = config().getString("province",
@@ -326,7 +312,7 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 	}
 
 	// TODO: load private key
-	const auto privateKey{ CertificateManager::generate_rsa_key(2048) };
+	const auto privateKey{ CertificateManager::generate_rsa_key() };
 
 	if (!privateKey) {
 		logger().fatal("Failed to generate private key\n");
@@ -442,7 +428,6 @@ Poco::Util::OptionCallback<ServerDaemon> ServerDaemon::handle_flag() {
 }
 
 const CertificateInfo ServerDaemon::DEFAULT_CERT_INFO = {
-	.certificateKeyLength = 2048,
 	.country = "UK",
 	.province = "Test Province",
 	.city = "Test City",

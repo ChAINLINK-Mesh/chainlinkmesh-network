@@ -14,7 +14,6 @@ struct Certificate {
 };
 
 struct CertificateInfo {
-	std::uint32_t certificateKeyLength;
 	// Encoded in UTF-8 format.
 	std::string country, province, city, organisation, commonName, userID;
 	std::uint64_t validityDuration;
@@ -28,8 +27,7 @@ public:
 	[[nodiscard]] std::optional<Certificate> get_certificate(NodeID nodeID) const;
 	void set_certificate(NodeID nodeID, const Certificate& certificate);
 
-	[[nodiscard]] static std::optional<EVP_PKEY_RAII>
-	generate_rsa_key(std::uint32_t keyLength);
+	[[nodiscard]] static std::optional<EVP_PKEY_RAII> generate_rsa_key();
 
 	// Generates a X509v3 certificate
 	[[nodiscard]] static std::optional<X509_RAII>
@@ -112,6 +110,9 @@ public:
 	static std::optional<X509_RAII>
 	sign_csr(X509_REQ_RAII& req, const X509_RAII& caCert,
 	         const EVP_PKEY_RAII& key, std::uint64_t validityDurationSeconds);
+
+	// Enforce 2048-bit RSA keys
+	static const constexpr std::uint32_t KEY_LENGTH = 2048;
 
 protected:
 	CertificateManager(std::filesystem::path certificatesFolder);

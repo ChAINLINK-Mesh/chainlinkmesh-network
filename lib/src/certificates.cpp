@@ -91,7 +91,7 @@ void CertificateManager::set_certificate(NodeID nodeID,
 }
 
 [[nodiscard]] std::optional<EVP_PKEY_RAII>
-CertificateManager::generate_rsa_key(std::uint32_t keyLength) {
+CertificateManager::generate_rsa_key() {
 	const EVP_PKEY_CTX_RAII rsaCtx{ EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, nullptr) };
 
 	// If we failed to generate a valid RSA context.
@@ -104,7 +104,7 @@ CertificateManager::generate_rsa_key(std::uint32_t keyLength) {
 	}
 
 	if (EVP_PKEY_CTX_set_rsa_keygen_bits(rsaCtx.get(),
-	                                     static_cast<int>(keyLength)) <= 0) {
+	                                     static_cast<int>(KEY_LENGTH)) <= 0) {
 		return std::nullopt;
 	}
 
@@ -119,11 +119,9 @@ CertificateManager::generate_rsa_key(std::uint32_t keyLength) {
 [[nodiscard]] std::optional<X509_RAII>
 CertificateManager::generate_certificate(const CertificateInfo& certificateInfo,
                                          const EVP_PKEY_RAII& rsaKey) {
-	assert(certificateInfo.certificateKeyLength <
-	       std::numeric_limits<int>::max());
 	assert(certificateInfo.validityDuration < std::numeric_limits<long>::max());
 
-	if (debug_check(static_cast<int>(certificateInfo.certificateKeyLength) !=
+	if (debug_check(static_cast<int>(KEY_LENGTH) !=
 	                EVP_PKEY_get_bits(rsaKey.get()))) {
 		return std::nullopt;
 	}
@@ -173,12 +171,10 @@ CertificateManager::generate_certificate(const CertificateInfo& certificateInfo,
 [[nodiscard]] std::optional<X509_REQ_RAII>
 CertificateManager::generate_certificate_request(
     const CertificateInfo& certificateInfo) {
-	assert(certificateInfo.certificateKeyLength <
-	       std::numeric_limits<int>::max());
 	assert(certificateInfo.validityDuration < std::numeric_limits<long>::max());
 
 	// Generate RSA key
-	const auto rsaKey = generate_rsa_key(certificateInfo.certificateKeyLength);
+	const auto rsaKey = generate_rsa_key();
 
 	if (!rsaKey) {
 		return std::nullopt;

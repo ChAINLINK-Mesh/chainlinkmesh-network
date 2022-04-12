@@ -29,20 +29,11 @@ void instantiate_certificate_manager() {
 }
 
 void generate_rsa_key() {
-	// Create a 2-bit RSA key
-	const auto invalidLengthKey = CertificateManager::generate_rsa_key(2);
-
-	if (invalidLengthKey) {
-		throw "Incorrectly created 2-bit RSA key (should be invalid)";
-	}
-
-	const auto validKeyLength = 4096;
-	const auto validLengthKey =
-	    CertificateManager::generate_rsa_key(validKeyLength);
+	const auto validLengthKey = CertificateManager::generate_rsa_key();
 
 	if (!validLengthKey) {
-		throw "Failed to create a valid " + std::to_string(validKeyLength) +
-		    "-bit RSA key";
+		throw "Failed to create a valid " +
+		    std::to_string(CertificateManager::KEY_LENGTH) + "-bit RSA key";
 	}
 
 	if (EVP_PKEY_get_base_id(validLengthKey->get()) != EVP_PKEY_RSA) {
@@ -51,10 +42,10 @@ void generate_rsa_key() {
 	}
 
 	if (const auto kl = EVP_PKEY_get_bits(validLengthKey->get());
-	    kl != validKeyLength) {
+	    kl != CertificateManager::KEY_LENGTH) {
 		throw "Created a valid RSA key, but was " + std::to_string(kl) +
-		    " bits instead of the requested " + std::to_string(validKeyLength) +
-		    " bits";
+		    " bits instead of the requested " +
+		    std::to_string(CertificateManager::KEY_LENGTH) + " bits";
 	}
 }
 
@@ -64,9 +55,8 @@ void generate_certificate() {
 		throw "Incorrectly created a certificate from invalid null private key";
 	}
 
-	const auto key = CertificateManager::generate_rsa_key(2048).value();
+	const auto key = CertificateManager::generate_rsa_key().value();
 	const CertificateInfo invalidCertificateInfo{
-		.certificateKeyLength = 2048,
 		.country = "",
 		.province = "",
 		.city = "",
@@ -82,7 +72,6 @@ void generate_certificate() {
 	}
 
 	CertificateInfo certificateInfo{
-		.certificateKeyLength = 128,
 		.country = "GB",
 		.province = "England",
 		.city = "London",
@@ -92,11 +81,6 @@ void generate_certificate() {
 		.validityDuration = 900,
 	};
 
-	if (CertificateManager::generate_certificate(certificateInfo, key)) {
-		throw "Incorrectly created certificate with disagreeing key lengths";
-	}
-
-	certificateInfo.certificateKeyLength = 2048;
 	const auto validCertificate =
 	    CertificateManager::generate_certificate(certificateInfo, key);
 
@@ -108,7 +92,6 @@ void generate_certificate() {
 void generate_certificate_request() {
 	const auto certificateRequest =
 	    CertificateManager::generate_certificate_request({
-	        .certificateKeyLength = 2048,
 	        .country = "US",
 	        .province = "California",
 	        .city = "San Francisco",
