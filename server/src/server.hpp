@@ -1,13 +1,14 @@
 #pragma once
 
 #include "linux-wireguard-manager.hpp"
+#include "public-protocol.hpp"
 #include "types.hpp"
 #include "wireguard.hpp"
+
 #include <Poco/Net/SocketAddress.h>
 #include <Poco/Net/TCPServer.h>
 #include <cstdint>
 #include <optional>
-#include <public-protocol.hpp>
 #include <random>
 
 // Specialisation, which can specifically handle peers joining the Linux WG

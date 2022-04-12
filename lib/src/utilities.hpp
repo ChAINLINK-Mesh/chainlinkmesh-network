@@ -1,5 +1,7 @@
 #pragma once
+
 #include "types.hpp"
+
 #include <Poco/ByteOrder.h>
 #include <Poco/Net/IPAddress.h>
 #include <algorithm>

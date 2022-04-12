@@ -1,6 +1,7 @@
 #include "linux-wireguard-manager.hpp"
 #include "utilities.hpp"
 #include "wireguard.hpp"
+
 #include <Poco/Net/IPAddress.h>
 #include <Poco/Net/SocketAddress.h>
 #include <cstring>
@@ -62,7 +63,7 @@ LinuxWireGuardManager::LinuxWireGuardManager(
 		auto* const peer = LinuxWireGuardManager::wg_peer_from_peer(Peer{
 		    .publicKey = node.wireGuardPublicKey,
 		    .endpoint =
-		        Poco::Net::SocketAddress{ node.wireGuardIP, node.wireGuardPort },
+		        Poco::Net::SocketAddress{ node.wireGuardHost, node.wireGuardPort },
 		    .internalAddress = node.controlPlaneIP,
 		});
 

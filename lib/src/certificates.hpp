@@ -1,12 +1,16 @@
 #pragma once
 
 #include "utilities.hpp"
+
 #include <cinttypes>
 #include <filesystem>
 #include <map>
-#include <openssl/x509v3.h>
 #include <optional>
 #include <vector>
+
+extern "C" {
+#include <openssl/x509v3.h>
+}
 
 struct Certificate {
 	NodeID id;

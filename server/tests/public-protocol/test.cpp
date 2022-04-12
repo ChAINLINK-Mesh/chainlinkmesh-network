@@ -2,15 +2,19 @@
 #include "certificates.hpp"
 #include "types.hpp"
 #include "wireguard.hpp"
+
 #include <Poco/FIFOBuffer.h>
 #include <Poco/Net/NetException.h>
 #include <Poco/Net/StreamSocket.h>
 #include <cassert>
 #include <chrono>
 #include <limits>
+#include <thread>
+
+extern "C" {
 #include <openssl/bio.h>
 #include <openssl/pem.h>
-#include <thread>
+}
 
 void check_open_status(Server& server);
 Server::Configuration get_config(const TestPorts& testPorts);

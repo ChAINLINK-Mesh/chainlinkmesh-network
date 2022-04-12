@@ -1,7 +1,10 @@
-#include <certificates.hpp>
-#include <literals.hpp>
+#include "test.hpp"
+#include "certificates.hpp"
+#include "literals.hpp"
+
+extern "C" {
 #include <openssl/evp.h>
-#include <test.hpp>
+}
 
 void instantiate_certificate_manager();
 void generate_rsa_key();

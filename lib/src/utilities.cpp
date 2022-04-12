@@ -1,11 +1,15 @@
 #include "utilities.hpp"
+
 #include <Poco/Net/IPAddress.h>
 #include <bit>
 #include <cassert>
 #include <cstring>
+#include <span>
+
+extern "C" {
 #include <netinet/in.h>
 #include <openssl/hmac.h>
-#include <span>
+}
 
 const constexpr std::uint32_t IPV6_ADDR_LENGTH = 16;
 

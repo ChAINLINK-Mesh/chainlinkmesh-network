@@ -1,10 +1,10 @@
 #pragma once
 
 #include "types.hpp"
+
 #include <memory>
 #include <node.hpp>
 #include <random>
-#include <wireguard.hpp>
 
 extern "C" {
 #include <wireguard.h>

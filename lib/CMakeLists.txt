@@ -6,6 +6,8 @@ set(SRC_DIRECTORY src)
 set(HEADER_FILES
     certificates.hpp
     clock.hpp
+    debug.hpp
+    error.hpp
     literals.hpp
     node.hpp
     private-protocol.hpp
@@ -20,6 +22,7 @@ set(SOURCE_FILES
     literals.cpp
     node.cpp
     public-protocol.cpp
+    types.cpp
     utilities.cpp
     wireguard.cpp
     )

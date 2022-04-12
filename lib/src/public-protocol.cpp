@@ -1,11 +1,13 @@
 #include "public-protocol.hpp"
 #include "certificates.hpp"
-#include "openssl/obj_mac.h"
-#include "openssl/x509.h"
 #include "types.hpp"
 #include "utilities.hpp"
 #include "wireguard.hpp"
+
 #include <Poco/ByteOrder.h>
+#include <Poco/Exception.h>
+#include <Poco/Net/DNS.h>
+#include <Poco/Net/IPAddress.h>
 #include <Poco/Net/NetException.h>
 #include <Poco/Net/TCPServer.h>
 #include <cassert>
@@ -13,12 +15,18 @@
 #include <ios>
 #include <iostream>
 #include <limits>
-#include <openssl/err.h>
-#include <openssl/evp.h>
-#include <openssl/pem.h>
 #include <random>
 #include <stdexcept>
 #include <utility>
+#include <variant>
+
+extern "C" {
+#include <openssl/err.h>
+#include <openssl/evp.h>
+#include <openssl/obj_mac.h>
+#include <openssl/pem.h>
+#include <openssl/x509.h>
+}
 
 using namespace PublicProtocol;
 
@@ -29,6 +37,9 @@ PublicProtocolManager::PublicProtocolManager(Configuration config)
       idDistribution{ Node::generate_id_range() }, randomEngine{
 	      config.randomEngine
       } {
+	// Ensure that the current node's host is specified as a valid address.
+	assert(selfNode.wireGuardHost);
+
 	this->nodes.insert(std::make_pair(selfNode.id, selfNode));
 
 	for (const auto& peer : config.peers) {
@@ -324,7 +335,7 @@ PublicProtocolManager::create_response(InitialisationPacket packet) {
 		.allocatedNode = this->idDistribution(this->randomEngine),
 		.respondingWireGuardPublicKey = this->selfNode.wireGuardPublicKey,
 		.respondingControlPlaneIPAddress = this->selfNode.controlPlaneIP,
-		.respondingWireGuardIPAddress = this->selfNode.wireGuardIP,
+		.respondingWireGuardIPAddress = this->selfNode.wireGuardHost,
 		.respondingControlPlanePort = this->selfNode.controlPlanePort,
 		.respondingWireGuardPort = this->selfNode.wireGuardPort,
 		.signedCSR = signedCSR.value(),
@@ -389,8 +400,8 @@ void PublicConnection::run() {
 		    .controlPlanePublicKey = {},
 		    .wireGuardPublicKey = peerWGPubkey,
 		    .controlPlaneIP = socket().peerAddress().host(),
-		    .wireGuardIP = socket().peerAddress().host(),
 		    .controlPlanePort = 0,
+		    .wireGuardHost = Host{ socket().peerAddress().host() },
 		    .wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,
 		    .controlPlaneCertificate = responsePacket->signedCSR,
 		});
@@ -609,31 +620,17 @@ PublicProtocolClient::PublicProtocolClient(Configuration config)
     : config{ std::move(config) } {}
 
 InitialisationRespPacket PublicProtocolClient::connect() {
-	std::optional<Poco::Net::IPAddress> parentAddress{};
-	std::optional<std::uint16_t> port;
+	const std::optional<std::uint16_t> port = config.parentAddress.port();
 
-	const auto tryDecodeIPPortPair =
-	    [](const std::string& addr) -> std::optional<Poco::Net::SocketAddress> {
+	const Poco::Net::IPAddress parentAddress = [](const Host& parentAddress) {
 		try {
-			return Poco::Net::SocketAddress{ addr };
-		} catch (Poco::Net::InvalidAddressException&) {
-			return std::nullopt;
+			return static_cast<Poco::Net::IPAddress>(parentAddress);
+		} catch (const Poco::RuntimeException& e) {
+			throw std::invalid_argument{ "Couldn't understand parent address '" +
+				                           static_cast<std::string>(parentAddress) +
+				                           "': " + e.what() };
 		}
-	};
-
-	const auto decodedAddr = tryDecodeIPPortPair(config.parentAddress);
-	if (decodedAddr) {
-		parentAddress = decodedAddr->host();
-		port = decodedAddr->port();
-	} else if (Poco::Net::IPAddress ip{};
-	           Poco::Net::IPAddress::tryParse(config.parentAddress, ip)) {
-		parentAddress = ip;
-	}
-
-	if (!parentAddress) {
-		throw std::invalid_argument{ "Cannot parse parent address '" +
-			                           config.parentAddress + "'" };
-	}
+	}(config.parentAddress);
 
 	auto csr = CertificateManager::generate_certificate_request(config.certInfo);
 
@@ -652,7 +649,7 @@ InitialisationRespPacket PublicProtocolClient::connect() {
 	};
 
 	Poco::Net::StreamSocket publicSocket{ Poco::Net::SocketAddress(
-		  { parentAddress.value(),
+		  { parentAddress,
 		    port.value_or(PublicProtocol::DEFAULT_CONTROL_PLANE_PORT) }) };
 
 	const auto bytes = initPacket.get_bytes();
@@ -682,10 +679,9 @@ InitialisationRespPacket PublicProtocolClient::connect() {
 	}
 
 	// If parent is listening on all IPs (i.e. a global address of ::/0 or
-	// 0.0.0.0/0), then use the address we connected
-	// // to them with instead.
+	// 0.0.0.0/0), then use the address we used to connect to them instead.
 	if (response->respondingWireGuardIPAddress.prefixLength() == 0) {
-		response->respondingWireGuardIPAddress = decodedAddr.value().host();
+		response->respondingWireGuardIPAddress = parentAddress;
 	}
 
 	std::cerr << "Received response from parent server ("
@@ -697,7 +693,14 @@ InitialisationRespPacket PublicProtocolClient::connect() {
 
 	return response.value();
 
-	// TODO: Lookup DNS addresses.
-	// TODO: Issue an initialisation request to requested server.
 	// TODO: Use HTTPS / DNS to verify response.
+}
+
+Host PublicProtocolClient::get_parent_address(
+    const InitialisationRespPacket& response) const {
+	if (config.parentAddress) {
+		return config.parentAddress;
+	}
+
+	return Host{ response.respondingWireGuardIPAddress };
 }

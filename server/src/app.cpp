@@ -280,7 +280,7 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 		PublicProtocol::PublicProtocolClient client{
 			PublicProtocol::PublicProtocolClient::Configuration{
 			    .certInfo = certInfo,
-			    .parentAddress = parentAddressStr,
+			    .parentAddress = Host{ parentAddressStr },
 			    .pskHash = pskHash,
 			    .pskSignature = pskSignature,
 			    .referringNode = referringNode,
@@ -296,8 +296,8 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 			    .controlPlanePublicKey = {},
 			    .wireGuardPublicKey = resp.respondingWireGuardPublicKey,
 			    .controlPlaneIP = resp.respondingControlPlaneIPAddress,
-			    .wireGuardIP = resp.respondingWireGuardIPAddress,
 			    .controlPlanePort = resp.respondingControlPlanePort,
+			    .wireGuardHost = client.get_parent_address(resp),
 			    .wireGuardPort = resp.respondingWireGuardPort,
 			    .controlPlaneCertificate = {},
 			});

@@ -1,14 +1,18 @@
 #include "certificates.hpp"
 #include "clock.hpp"
+#include "public-protocol.hpp"
 #include "wireguard.hpp"
+
 #include <cassert>
 #include <filesystem>
 #include <fstream>
-#include <openssl/pem.h>
-#include <public-protocol.hpp>
 #include <random>
 #include <string>
 #include <test.hpp>
+
+extern "C" {
+#include <openssl/pem.h>
+}
 
 using namespace PublicProtocol;
 PublicProtocolManager get_testing_protocol_manager();
@@ -164,8 +168,8 @@ PublicProtocolManager get_testing_protocol_manager() {
 		          .controlPlanePublicKey = privateKey.value(),
 		          .wireGuardPublicKey = wireguardPubkey,
 		          .controlPlaneIP = Poco::Net::IPAddress{ "10.0.0.1" },
-		          .wireGuardIP = Poco::Net::IPAddress{ "127.0.0.1" },
 		          .controlPlanePort = PublicProtocol::DEFAULT_CONTROL_PLANE_PORT,
+		          .wireGuardHost = Host{ "127.0.0.1" },
 		          .wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,
 		          .controlPlaneCertificate = certificate.value(),
 		      },

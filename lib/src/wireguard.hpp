@@ -1,5 +1,7 @@
 #pragma once
+
 #include "types.hpp"
+
 #include <Poco/Net/IPAddress.h>
 #include <Poco/Net/SocketAddress.h>
 #include <optional>

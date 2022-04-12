@@ -1,5 +1,6 @@
 #include "certificates.hpp"
 #include "test.hpp"
+
 #include <Poco/Net/SocketAddress.h>
 #include <cassert>
 #include <fstream>
@@ -40,23 +41,31 @@ ByteString read_file(const std::string& filename) {
 }
 
 Server get_server(Server::Configuration config) {
-	const auto privateKeyBytes = read_file("legitimate-ca-key.pem");
-	auto privateKey = CertificateManager::decode_pem_private_key(privateKeyBytes);
-	assert(privateKey.has_value());
-	config.controlPlanePrivateKey = privateKey.value();
+	if (!config.controlPlanePrivateKey) {
+		const auto privateKeyBytes = read_file("legitimate-ca-key.pem");
+		auto privateKey =
+		    CertificateManager::decode_pem_private_key(privateKeyBytes);
+		assert(privateKey.has_value());
+		config.controlPlanePrivateKey = privateKey.value();
+	}
+
 	return Server{ config };
 }
 
 TestPorts get_test_ports() {
-	const std::uint16_t publicPort =
-	    rand() %
-	        (std::numeric_limits<std::uint16_t>::max() - PRIVILEDGED_PORTS - 3) +
-	    PRIVILEDGED_PORTS;
+	const auto maxBasePort =
+	    std::numeric_limits<std::uint16_t>::max() - PRIVILEDGED_PORTS - 3;
+	static auto basePort = rand() % maxBasePort + PRIVILEDGED_PORTS;
+	const std::uint16_t publicPort = basePort;
 	const std::uint16_t privatePort = publicPort + 1;
 	const std::uint16_t wireGuardPort = privatePort + 1;
 
 	std::clog << "Using ports " << publicPort << "-" << wireGuardPort
 	          << " for testing\n";
+
+	// Increment base port, wrapping if necessary
+	basePort = ((wireGuardPort - PRIVILEDGED_PORTS + 1) % maxBasePort) +
+	           PRIVILEDGED_PORTS;
 
 	return TestPorts{
 		.wireGuardAddress = SocketAddress{ TEST_HOST, wireGuardPort },

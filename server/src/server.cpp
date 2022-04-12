@@ -1,13 +1,14 @@
 #include "server.hpp"
 #include "clock.hpp"
 #include "linux-wireguard-manager.hpp"
+#include "private-protocol.hpp"
+#include "public-protocol.hpp"
 #include "types.hpp"
 #include "wireguard.hpp"
+
 #include <Poco/Net/SocketAddress.h>
 #include <Poco/Net/TCPServer.h>
 #include <functional>
-#include <private-protocol.hpp>
-#include <public-protocol.hpp>
 #include <random>
 #include <utility>
 
@@ -124,8 +125,8 @@ Node Server::get_self(const Server::Configuration& config) {
 		.controlPlanePublicKey = config.controlPlanePrivateKey,
 		.wireGuardPublicKey = config.meshPublicKey,
 		.controlPlaneIP = privateProtoHost,
-		.wireGuardIP = config.wireGuardAddress.host(),
 		.controlPlanePort = privateProtoPort,
+		.wireGuardHost = Host{ config.wireGuardAddress },
 		.wireGuardPort = config.wireGuardAddress.port(),
 		.controlPlaneCertificate = config.controlPlaneCertificate,
 	};

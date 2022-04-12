@@ -1,5 +1,6 @@
 #include "wireguard.hpp"
 #include "node.hpp"
+
 #include <Poco/ByteOrder.h>
 #include <Poco/Net/IPAddress.h>
 #include <cstring>

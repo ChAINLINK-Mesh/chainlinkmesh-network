@@ -1,4 +1,5 @@
 #include "node.hpp"
+
 #include <cstdint>
 #include <limits>
 #include <random>

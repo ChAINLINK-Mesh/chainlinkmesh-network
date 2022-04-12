@@ -1,9 +1,14 @@
 #pragma once
 
+#include "error.hpp"
+
+#include <Poco/Net/IPAddress.h>
+#include <Poco/Net/SocketAddress.h>
 #include <cassert>
 #include <concepts>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 
 extern "C" {
@@ -116,3 +121,76 @@ const constexpr std::uint16_t SHA256_DIGEST_SIZE = 32;
 const constexpr std::uint16_t SHA256_SIGNATURE_SIZE = 256;
 using SHA256_Hash = std::array<std::uint8_t, SHA256_DIGEST_SIZE>;
 using SHA256_Signature = std::array<std::uint8_t, SHA256_SIGNATURE_SIZE>;
+
+class Host {
+public:
+	/**
+	 * @brief Constructs a host from either
+	 *         * a socket address IP:Port pair,
+	 *         * an IP
+	 *         * a DNS hostname
+	 *
+	 * @param host the host identifier, which should not be empty
+	 */
+	explicit Host(std::string host);
+	explicit Host(Poco::Net::IPAddress host) noexcept;
+	explicit Host(const Poco::Net::SocketAddress& host) noexcept;
+
+	Host(const Host& other) = default;
+	Host(Host&& other) = default;
+
+	Host& operator=(const Host& other) = default;
+	Host& operator=(Host&& other) = default;
+
+	/**
+	 * @brief Resolves the given host to an IP address. Will not attempt to
+	 *        re-resolve addresses.
+	 *
+	 * @return The host's IP address.
+	 */
+	operator Poco::Net::IPAddress() const;
+
+	/**
+	 * @brief Resolves the given host to an IP address. Returns any exceptions
+	 *        encountered. Will not attempt to re-resolve addresses.
+	 *
+	 * @return The host's IP address or any exceptions encountered.
+	 */
+	Expected<Poco::Net::IPAddress> resolve() const noexcept;
+
+	/**
+	 * @brief Checks whether the host is valid.
+	 *
+	 * @return True if the host resolves (i.e. is valid).
+	 */
+	[[nodiscard]] explicit operator bool() const noexcept;
+
+	/**
+	 * @brief Gets the least-resolved name possible.
+	 *
+	 * @return The DNS hostname, or the IP address if the DNS hostname was never
+	 *         provided.
+	 */
+	explicit operator std::string() const noexcept;
+
+	/**
+	 * @brief Gets the port associated with this host.
+	 *
+	 * @return The associated port, or std::nullopt if no port has been provided.
+	 */
+	std::optional<std::uint16_t> port() const noexcept;
+
+protected:
+	/**
+	 * @brief Resolves the DNS hostname into an IP address. Will re-resolve
+	 *        domains, even if IP address is already known.
+	 *
+	 * @return The IP address if the DNS hostname resolved correctly, otherwise
+	 *         the exception which caused the failure.
+	 */
+	Expected<Poco::Net::IPAddress> reresolve() const noexcept;
+
+	mutable std::optional<Poco::Net::IPAddress> ip;
+	std::optional<std::string> dns;
+	std::optional<std::uint16_t> portNumber;
+};

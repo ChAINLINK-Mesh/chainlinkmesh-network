@@ -2,10 +2,13 @@
 
 #include "certificates.hpp"
 #include "clock.hpp"
+#include "error.hpp"
 #include "node.hpp"
 #include "utilities.hpp"
 #include "wireguard.hpp"
+
 #include <Poco/Logger.h>
+#include <Poco/Net/IPAddress.h>
 #include <Poco/Net/TCPServer.h>
 #include <concepts>
 #include <map>
@@ -167,7 +170,7 @@ namespace PublicProtocol {
 	public:
 		struct Configuration {
 			CertificateInfo certInfo;
-			std::string parentAddress;
+			Host parentAddress;
 			PublicProtocol::InitialisationPacket::Hash pskHash;
 			PublicProtocol::InitialisationPacket::Signature pskSignature;
 			std::uint64_t referringNode;
@@ -176,6 +179,8 @@ namespace PublicProtocol {
 
 		PublicProtocolClient(Configuration config);
 		InitialisationRespPacket connect();
+		[[nodiscard]] Host
+		get_parent_address(const InitialisationRespPacket& response) const;
 
 	protected:
 		Configuration config;

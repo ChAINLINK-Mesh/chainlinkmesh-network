@@ -2,6 +2,7 @@
 
 #include "public-protocol.hpp"
 #include "server.hpp"
+
 #include <Poco/Util/AbstractConfiguration.h>
 #include <Poco/Util/Application.h>
 #include <Poco/Util/OptionCallback.h>

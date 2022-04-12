@@ -1,20 +1,24 @@
 #include "certificates.hpp"
-#include "debug.h"
-#include "openssl/asn1.h"
-#include "openssl/err.h"
+#include "debug.hpp"
 #include "types.hpp"
 #include "utilities.hpp"
+
 #include <cassert>
 #include <cstring>
 #include <fstream>
 #include <limits>
+#include <optional>
+#include <vector>
+
+extern "C" {
+#include <openssl/asn1.h>
 #include <openssl/bio.h>
+#include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/rsa.h>
 #include <openssl/x509.h>
-#include <optional>
-#include <vector>
+}
 
 std::shared_ptr<CertificateManager> CertificateManager::instance = nullptr;
 
@@ -425,7 +429,10 @@ bool CertificateManager::x509_set_name_from_certificate_info(
 	assert(certificateInfo.commonName.size() < std::numeric_limits<int>::max());
 	assert(certificateInfo.userID.size() < std::numeric_limits<int>::max());
 
-	// TODO: Replace the string codes with their enumerated versions
+	// TODO: Replace the string codes with their enumerated versions.
+	// Also, "C" is likely to fail, due to the upper-bounds placed on the data
+	// length. See: https://datatracker.ietf.org/doc/html/rfc5280#appendix-A.1 '--
+	// Upper Bounds'
 	if (X509_NAME_add_entry_by_txt(
 	        x509Name, "C", MBSTRING_UTF8,
 	        reinterpret_cast<const unsigned char*>(
