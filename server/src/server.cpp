@@ -48,11 +48,7 @@ Server::Server(const Server::Configuration& config)
 	      },
 	      [t = this](const Node& node) { return t->add_node(node); }
       },
-      wireGuardPrivateKey{ config.meshPrivateKey },
-      wireGuardPublicKey{ config.meshPublicKey },
-      controlPlanePrivateKey{ config.controlPlanePrivateKey }, idRange{
-	      Node::generate_id_range()
-      } {}
+      idRange{ Node::generate_id_range() } {}
 
 void Server::start() {
 	// Semantics unclear for repeated starts.
@@ -61,7 +57,8 @@ void Server::start() {
 	// TODO: Prefill the interface with a list of saved other nodes.
 	LinuxWireGuardManager wgManager{ this->self,
 		                               this->publicProtoManager.get_peer_nodes(),
-		                               this->wireGuardPrivateKey, randomEngine };
+		                               this->self.wireGuardPrivateKey,
+		                               randomEngine };
 	wgManager.setup_interface();
 	execution.emplace(ServerExecution{
 	    .publicProtoServer = this->publicProtoManager.start(
@@ -110,7 +107,7 @@ Poco::Net::TCPServerParams::Ptr Server::public_tcp_server_params() {
 	return params;
 }
 
-Node Server::get_self(const Server::Configuration& config) {
+SelfNode Server::get_self(const Server::Configuration& config) {
 	const auto id = config.id.value_or(idRange(randomEngine));
 
 	// The host for the private protocol is deterministically mapped according to
@@ -120,16 +117,96 @@ Node Server::get_self(const Server::Configuration& config) {
 	const auto privateProtoPort = config.privateProtoPort.value_or(
 	    PrivateProtocol::DEFAULT_CONTROL_PLANE_PORT);
 
-	return Node{
-		.id = id,
-		.controlPlanePublicKey = config.controlPlanePrivateKey,
-		.wireGuardPublicKey = config.meshPublicKey,
-		.controlPlaneIP = privateProtoHost,
-		.controlPlanePort = privateProtoPort,
-		.wireGuardHost = Host{ config.wireGuardAddress },
-		.wireGuardPort = config.wireGuardAddress.port(),
-		.controlPlaneCertificate = config.controlPlaneCertificate,
+	return SelfNode{
+		{
+		    .id = id,
+		    .controlPlanePublicKey = config.controlPlanePrivateKey,
+		    .wireGuardPublicKey = config.meshPublicKey,
+		    .controlPlaneIP = privateProtoHost,
+		    .controlPlanePort = privateProtoPort,
+		    .wireGuardHost = Host{ config.wireGuardAddress },
+		    .wireGuardPort = config.wireGuardAddress.port(),
+		    .controlPlaneCertificate = config.controlPlaneCertificate,
+		},
+		config.controlPlanePrivateKey,
+		config.meshPrivateKey,
 	};
+}
+
+std::vector<Node> Server::get_peer_nodes() const {
+	return publicProtoManager.get_peer_nodes();
+}
+
+Poco::AutoPtr<Poco::Util::PropertyFileConfiguration>
+Server::get_configuration() const {
+	Poco::AutoPtr<Poco::Util::PropertyFileConfiguration> configuration{
+		new Poco::Util::PropertyFileConfiguration{}
+	};
+
+	const auto serverDetails = get_self();
+	using CertEncoder = GenericCertificateManager<char>;
+
+	configuration->setUInt64("id", serverDetails.id);
+	configuration->setString(
+	    "control-plane-private-key",
+	    CertEncoder::encode_pem(serverDetails.controlPlanePrivateKey));
+	configuration->setString(
+	    "mesh-public-key",
+	    base64_encode(serverDetails.wireGuardPublicKey).value());
+	configuration->setString(
+	    "mesh-private-key",
+	    base64_encode(serverDetails.wireGuardPrivateKey).value());
+	configuration->setString(
+	    "certificate",
+	    CertEncoder::encode_pem(serverDetails.controlPlaneCertificate));
+	configuration->setString("public-proto-address",
+	                         get_public_proto_address().toString());
+	configuration->setString("private-proto-address",
+	                         get_private_proto_address().toString());
+
+	if (serverDetails.parent.has_value()) {
+		configuration->setUInt64("parent", serverDetails.parent.value());
+	}
+
+	for (const auto& peer : get_peer_nodes()) {
+		auto peerConfig = get_node_configuration(peer);
+		peerConfig->copyTo(*configuration);
+	}
+
+	return configuration;
+}
+
+Poco::AutoPtr<Poco::Util::MapConfiguration>
+Server::get_node_configuration(const Node& node) {
+	const std::string nodeName = "node." + std::to_string(node.id);
+
+	Poco::AutoPtr<Poco::Util::MapConfiguration> configuration{
+		new Poco::Util::MapConfiguration{}
+	};
+
+	using CertEncoder = GenericCertificateManager<char>;
+
+	configuration->setString(nodeName + ".control-plane-public-key",
+	                         CertEncoder::encode_pem(node.controlPlanePublicKey));
+	configuration->setString(nodeName + ".wireguard-public-key",
+	                         base64_encode(node.wireGuardPublicKey).value());
+	configuration->setString(
+	    nodeName + ".control-plane-address",
+	    Poco::Net::SocketAddress{ node.controlPlaneIP, node.controlPlanePort }
+	        .toString());
+	configuration->setString(
+	    nodeName + ".wireguard-address",
+	    Poco::Net::SocketAddress{ node.wireGuardHost, node.wireGuardPort }
+	        .toString());
+	configuration->setString(
+	    nodeName + ".control-plane-certificate",
+	    CertEncoder::encode_pem(node.controlPlaneCertificate));
+
+	if (node.parent.has_value()) {
+		configuration->setUInt64(nodeName + ".parent", node.parent.value());
+	}
+
+	return configuration;
 }
 
 std::string Server::get_psk() const {
@@ -141,7 +218,7 @@ Server::get_signed_psk() const {
 	return publicProtoManager.get_signed_psk();
 }
 
-Node Server::get_self() const {
+SelfNode Server::get_self() const {
 	return self;
 }
 

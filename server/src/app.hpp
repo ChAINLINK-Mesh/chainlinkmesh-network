@@ -7,6 +7,7 @@
 #include <Poco/Util/Application.h>
 #include <Poco/Util/OptionCallback.h>
 #include <Poco/Util/OptionSet.h>
+#include <Poco/Util/PropertyFileConfiguration.h>
 #include <Poco/Util/ServerApplication.h>
 #include <memory>
 #include <utility>
@@ -18,6 +19,8 @@ public:
 	void defineOptions(Poco::Util::OptionSet& options) override;
 	void initialize(Poco::Util::Application& self) override;
 	int main(const std::vector<std::string>& args) override;
+	Poco::AutoPtr<Poco::Util::PropertyFileConfiguration>
+	get_configuration() const;
 
 protected:
 	std::unique_ptr<Server> server;

@@ -1,12 +1,15 @@
 #pragma once
 
 #include "linux-wireguard-manager.hpp"
+#include "node.hpp"
 #include "public-protocol.hpp"
 #include "types.hpp"
 #include "wireguard.hpp"
 
 #include <Poco/Net/SocketAddress.h>
 #include <Poco/Net/TCPServer.h>
+#include <Poco/Util/MapConfiguration.h>
+#include <Poco/Util/PropertyFileConfiguration.h>
 #include <cstdint>
 #include <optional>
 #include <random>
@@ -139,18 +142,21 @@ public:
 	std::string get_psk() const;
 	std::optional<std::tuple<std::uint64_t, SHA256_Hash, SHA256_Signature>>
 	get_signed_psk() const;
-	Node get_self() const;
+	SelfNode get_self() const;
+
+	std::vector<Node> get_peer_nodes() const;
+
+	Poco::AutoPtr<Poco::Util::PropertyFileConfiguration>
+	get_configuration() const;
 
 protected:
 	Node::IDRangeGenerator idRange;
 	std::default_random_engine randomEngine;
-	Node self;
+	SelfNode self;
 	Poco::Net::SocketAddress publicProtoAddress;
 	std::uint16_t privateProtoPort;
 	Poco::Net::SocketAddress wireGuardAddress;
-	AbstractWireGuardManager::Key wireGuardPrivateKey, wireGuardPublicKey;
 	LinuxPublicProtocolManager publicProtoManager;
-	EVP_PKEY_RAII controlPlanePrivateKey;
 
 	struct ServerExecution {
 		std::unique_ptr<Poco::Net::TCPServer> publicProtoServer;
@@ -168,7 +174,10 @@ protected:
 	 */
 	static Poco::Net::TCPServerParams::Ptr public_tcp_server_params();
 
-	Node get_self(const Configuration& config);
+	SelfNode get_self(const Configuration& config);
+
+	static Poco::AutoPtr<Poco::Util::MapConfiguration>
+	get_node_configuration(const Node& node);
 
 	static Poco::Net::SocketAddress default_public_proto_address(
 	    const Poco::Net::SocketAddress& wireGuardAddress);

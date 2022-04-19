@@ -6,7 +6,6 @@ extern "C" {
 #include <openssl/evp.h>
 }
 
-void instantiate_certificate_manager();
 void generate_rsa_key();
 void generate_certificate();
 void generate_certificate_request();
@@ -14,21 +13,11 @@ void decode_pem_csr();
 void reencode_pem_csr();
 
 void test() {
-	instantiate_certificate_manager();
 	generate_rsa_key();
 	generate_certificate();
 	generate_certificate_request();
 	decode_pem_csr();
 	reencode_pem_csr();
-}
-
-void instantiate_certificate_manager() {
-	const auto certificateManager =
-	    CertificateManager::create_instance(std::filesystem::path{ "/" });
-
-	if (!certificateManager) {
-		throw "Failed to create certificate manager object";
-	}
 }
 
 void generate_rsa_key() {

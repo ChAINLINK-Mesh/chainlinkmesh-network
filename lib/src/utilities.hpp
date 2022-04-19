@@ -90,6 +90,7 @@ std::optional<ByteString> base64_decode(std::string_view bytes);
 std::optional<ByteString> base64_decode(std::span<const std::uint8_t> bytes);
 
 std::optional<std::string> base64_encode(ByteString bytes);
+std::optional<std::string> base64_encode(std::span<const char> bytes);
 std::optional<std::string> base64_encode(std::span<const std::uint8_t> bytes);
 
 std::optional<std::uint64_t>

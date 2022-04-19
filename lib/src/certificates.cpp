@@ -8,6 +8,7 @@
 #include <fstream>
 #include <limits>
 #include <optional>
+#include <stdexcept>
 #include <vector>
 
 extern "C" {
@@ -20,82 +21,9 @@ extern "C" {
 #include <openssl/x509.h>
 }
 
-std::shared_ptr<CertificateManager> CertificateManager::instance = nullptr;
-
-CertificateManager::CertificateManager(std::filesystem::path certificatesFolder)
-    : certificatesFolder{ std::move(certificatesFolder) } {}
-
-std::filesystem::path
-CertificateManager::get_certificate_path(NodeID nodeID) const {
-	return certificatesFolder / (std::to_string(nodeID) + ".cert");
-}
-
-[[nodiscard]] std::optional<Certificate>
-CertificateManager::get_certificate(const NodeID nodeID) const {
-	// If we haven't yet created the certificates folder, we don't have the node's
-	// certificate.
-	if (!std::filesystem::exists(certificatesFolder)) {
-		return std::nullopt;
-	}
-
-	if (const auto certificate = certificatesMap.find(nodeID);
-	    certificate != certificatesMap.end()) {
-		return certificate->second;
-	}
-
-	const auto nodeCertificatePath = get_certificate_path(nodeID);
-
-	// If we don't have the node's certificate file, return empty.
-	if (!std::filesystem::exists(nodeCertificatePath)) {
-		return std::nullopt;
-	}
-
-	std::ifstream nodeCertificate{ nodeCertificatePath,
-		                             std::ios::in | std::ios::binary };
-
-	if (!nodeCertificate) {
-		return std::nullopt;
-	}
-
-	std::vector<unsigned char> nodeCertificateBytes{
-		std::istreambuf_iterator<char>{ nodeCertificate },
-		std::istreambuf_iterator<char>{}
-	};
-	nodeCertificate.close();
-
-	assert(nodeCertificateBytes.size() < std::numeric_limits<long>::max());
-
-	const auto* bytePointer = nodeCertificateBytes.data();
-
-	X509* temp;
-	d2i_X509(&temp, &bytePointer, static_cast<long>(nodeCertificateBytes.size()));
-
-	Certificate certificate{ nodeID, X509_RAII_SHARED{ temp, &::X509_free } };
-
-	return certificate;
-}
-
-void CertificateManager::set_certificate(NodeID nodeID,
-                                         const Certificate& certificate) {
-	// Create certificate folder if it doesn't exist
-	if (!std::filesystem::exists(certificatesFolder)) {
-		std::filesystem::create_directory(certificatesFolder);
-	}
-
-	unsigned char* certificateBytes = nullptr;
-	const int certificateBytesCount =
-	    i2d_X509(certificate.x509.get(), &certificateBytes);
-	OPENSSL_RAII<unsigned char> scopeExit1{ certificateBytes };
-
-	std::ofstream certificateFile{ get_certificate_path(nodeID) };
-	certificateFile.write(reinterpret_cast<char*>(certificateBytes),
-	                      certificateBytesCount);
-
-	certificatesMap.try_emplace(nodeID, certificate);
-}
-
+template <std::integral Encoding>
 [[nodiscard]] std::optional<EVP_PKEY_RAII>
-CertificateManager::generate_rsa_key() {
+GenericCertificateManager<Encoding>::generate_rsa_key() {
 	const EVP_PKEY_CTX_RAII rsaCtx{ EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, nullptr) };
 
 	// If we failed to generate a valid RSA context.
@@ -120,9 +48,10 @@ CertificateManager::generate_rsa_key() {
 	return EVP_PKEY_RAII{ tempRSAKey };
 }
 
+template <std::integral Encoding>
 [[nodiscard]] std::optional<X509_RAII>
-CertificateManager::generate_certificate(const CertificateInfo& certificateInfo,
-                                         const EVP_PKEY_RAII& rsaKey) {
+GenericCertificateManager<Encoding>::generate_certificate(
+    const CertificateInfo& certificateInfo, const EVP_PKEY_RAII& rsaKey) {
 	assert(certificateInfo.validityDuration < std::numeric_limits<long>::max());
 
 	if (debug_check(static_cast<int>(KEY_LENGTH) !=
@@ -172,8 +101,9 @@ CertificateManager::generate_certificate(const CertificateInfo& certificateInfo,
 	return x509;
 }
 
+template <std::integral Encoding>
 [[nodiscard]] std::optional<X509_REQ_RAII>
-CertificateManager::generate_certificate_request(
+GenericCertificateManager<Encoding>::generate_certificate_request(
     const CertificateInfo& certificateInfo) {
 	assert(certificateInfo.validityDuration < std::numeric_limits<long>::max());
 
@@ -191,9 +121,9 @@ CertificateManager::generate_certificate_request(
 		return std::nullopt;
 	}
 
-	if (X509_REQ_set_version(x509Req.get(),
-	                         CertificateManager::DEFAULT_CERTIFICATE_VERSION) !=
-	    1) {
+	if (X509_REQ_set_version(
+	        x509Req.get(),
+	        GenericCertificateManager::DEFAULT_CERTIFICATE_VERSION) != 1) {
 		return std::nullopt;
 	}
 
@@ -221,23 +151,10 @@ CertificateManager::generate_certificate_request(
 	return x509Req;
 }
 
-std::shared_ptr<CertificateManager> CertificateManager::create_instance(
-    const std::filesystem::path& certificatesFolder) {
-	CertificateManager::instance = std::make_shared<CertificateManager>(
-	    CertificateManager{ certificatesFolder });
-
-	return CertificateManager::instance;
-}
-
-std::shared_ptr<CertificateManager> CertificateManager::get_instance() {
-	// Invalid semantics to request a certificate manager if no instance has yet
-	// been created
-	assert(CertificateManager::instance);
-	return CertificateManager::instance;
-}
-
+template <std::integral Encoding>
 std::optional<X509_RAII>
-CertificateManager::decode_pem_certificate(const ByteStringView pem) {
+GenericCertificateManager<Encoding>::decode_pem_certificate(
+    const EncodingStringView pem) {
 	assert(pem.size() < std::numeric_limits<int>::max());
 
 	BIO_RAII bio{ BIO_new(BIO_s_mem()) };
@@ -264,8 +181,9 @@ CertificateManager::decode_pem_certificate(const ByteStringView pem) {
 	return certificate;
 }
 
+template <std::integral Encoding>
 std::optional<X509_REQ_RAII>
-CertificateManager::decode_pem_csr(ByteStringView pem) {
+GenericCertificateManager<Encoding>::decode_pem_csr(EncodingStringView pem) {
 	assert(pem.size() < std::numeric_limits<int>::max());
 
 	BIO_RAII bio{ BIO_new(BIO_s_mem()) };
@@ -292,8 +210,10 @@ CertificateManager::decode_pem_csr(ByteStringView pem) {
 	return certificate;
 }
 
+template <std::integral Encoding>
 std::optional<EVP_PKEY_RAII>
-CertificateManager::decode_pem_private_key(ByteStringView pem) {
+GenericCertificateManager<Encoding>::decode_pem_private_key(
+    EncodingStringView pem) {
 	assert(pem.size() < std::numeric_limits<int>::max());
 
 	BIO_RAII pemBIO{ BIO_new_mem_buf(pem.data(), static_cast<int>(pem.size())) };
@@ -302,9 +222,10 @@ CertificateManager::decode_pem_private_key(ByteStringView pem) {
 		                                            nullptr) };
 }
 
+template <std::integral Encoding>
 std::vector<std::string>
-CertificateManager::get_subject_attribute(const X509_NAME* const subject,
-                                          const int nid) {
+GenericCertificateManager<Encoding>::get_subject_attribute(
+    const X509_NAME* const subject, const int nid) {
 	assert(subject != nullptr);
 
 	std::vector<std::string> attributes{};
@@ -336,44 +257,89 @@ CertificateManager::get_subject_attribute(const X509_NAME* const subject,
 	return attributes;
 }
 
-ByteString CertificateManager::encode_pem(const X509_RAII& x509) {
+template <std::integral Encoding>
+std::optional<EVP_PKEY_RAII>
+GenericCertificateManager<Encoding>::get_certificate_pubkey(
+    const X509_RAII& certificate) {
+	assert(certificate != nullptr);
+
+	EVP_PKEY_RAII pubkey{ X509_get_pubkey(certificate.get()) };
+
+	if (pubkey == nullptr) {
+		return std::nullopt;
+	}
+
+	return pubkey;
+}
+
+template <std::integral Encoding>
+typename GenericCertificateManager<Encoding>::EncodingString
+GenericCertificateManager<Encoding>::encode_pem(const X509_RAII& x509) {
+	assert(x509 != nullptr);
+
 	BIO_RAII bio{ BIO_new(BIO_s_mem()) };
 
 	if (PEM_write_bio_X509(bio.get(), x509.get()) == 0) {
 		throw std::invalid_argument{ "PEM encoding failure" };
-	};
+	}
 
 	char* data = nullptr;
 	const auto pemSize = BIO_get_mem_data(bio.get(), &data);
 
 	if (pemSize <= 0) {
-		throw std::invalid_argument{ "PEM buffer read error" };
+		throw std::runtime_error{ "PEM buffer read error" };
 	}
 
-	return ByteString{ data, data + pemSize };
+	return EncodingString{ data, data + pemSize };
 }
 
-ByteString CertificateManager::encode_pem(const X509_REQ_RAII& x509Req) {
+template <std::integral Encoding>
+typename GenericCertificateManager<Encoding>::EncodingString
+GenericCertificateManager<Encoding>::encode_pem(const X509_REQ_RAII& x509Req) {
 	BIO_RAII bio{ BIO_new(BIO_s_mem()) };
 
 	if (PEM_write_bio_X509_REQ(bio.get(), x509Req.get()) == 0) {
 		throw std::invalid_argument{ "PEM encoding failure" };
-	};
+	}
 
 	char* data = nullptr;
 	const auto pemSize = BIO_get_mem_data(bio.get(), &data);
 
 	if (pemSize <= 0) {
-		throw std::invalid_argument{ "PEM buffer read error" };
+		throw std::runtime_error{ "PEM buffer read error" };
 	}
 
-	return ByteString{ data, data + pemSize };
+	return EncodingString{ data, data + pemSize };
 }
 
-std::optional<X509_RAII>
-CertificateManager::sign_csr(X509_REQ_RAII& req, const X509_RAII& caCert,
-                             const EVP_PKEY_RAII& key,
-                             const std::uint64_t validityDurationSeconds) {
+template <std::integral Encoding>
+typename GenericCertificateManager<Encoding>::EncodingString
+GenericCertificateManager<Encoding>::encode_pem(const EVP_PKEY_RAII& pkey) {
+	BIO_RAII bio{ BIO_new(BIO_s_mem()) };
+
+	// If this key contains a private key, encode the private key.
+	if (PEM_write_bio_PrivateKey(bio.get(), pkey.get(), nullptr, nullptr, 0,
+	                             nullptr, nullptr) == 0) {
+		// Otherwise, encode the public key it contains.
+		if (PEM_write_bio_PUBKEY(bio.get(), pkey.get()) == 0) {
+			throw std::invalid_argument{ "PEM encoding failure" };
+		}
+	}
+
+	char* data = nullptr;
+	const auto pemSize = BIO_get_mem_data(bio.get(), &data);
+
+	if (pemSize <= 0) {
+		throw std::runtime_error{ "PEM buffer read error" };
+	}
+
+	return EncodingString{ data, data + pemSize };
+}
+
+template <std::integral Encoding>
+std::optional<X509_RAII> GenericCertificateManager<Encoding>::sign_csr(
+    X509_REQ_RAII& req, const X509_RAII& caCert, const EVP_PKEY_RAII& key,
+    const std::uint64_t validityDurationSeconds) {
 	assert(validityDurationSeconds < std::numeric_limits<long>::max());
 
 	X509_RAII signedReq{ X509_new() };
@@ -383,7 +349,7 @@ CertificateManager::sign_csr(X509_REQ_RAII& req, const X509_RAII& caCert,
 	}
 
 	X509_set_version(signedReq.get(),
-	                 CertificateManager::DEFAULT_CERTIFICATE_VERSION);
+	                 GenericCertificateManager::DEFAULT_CERTIFICATE_VERSION);
 	const auto* const caCertPtr = caCert.get();
 	auto* const caSN = X509_get_subject_name(caCertPtr);
 
@@ -420,7 +386,8 @@ CertificateManager::sign_csr(X509_REQ_RAII& req, const X509_RAII& caCert,
 	return signedReq;
 }
 
-bool CertificateManager::x509_set_name_from_certificate_info(
+template <std::integral Encoding>
+bool GenericCertificateManager<Encoding>::x509_set_name_from_certificate_info(
     X509_NAME* x509Name, const CertificateInfo& certificateInfo) {
 	assert(certificateInfo.country.size() < std::numeric_limits<int>::max());
 	assert(certificateInfo.province.size() < std::numeric_limits<int>::max());
@@ -482,6 +449,9 @@ bool CertificateManager::x509_set_name_from_certificate_info(
 
 	return true;
 }
+
+template class GenericCertificateManager<char>;
+template class GenericCertificateManager<unsigned char>;
 
 bool operator==(const X509_REQ& a, const X509_REQ& b) {
 	BIO_RAII bio1{ BIO_new(BIO_s_mem()) };

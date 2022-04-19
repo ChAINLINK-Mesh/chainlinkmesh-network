@@ -215,6 +215,9 @@ PublicProtocolManager::decode_packet(ByteStringView buffer) {
 }
 
 bool PublicProtocolManager::add_node(const Node& node) {
+	assert(node.controlPlaneCertificate != nullptr);
+	assert(node.controlPlanePublicKey != nullptr);
+
 	std::lock_guard<std::mutex> nodesLock{ nodesMutex };
 	return this->nodes.insert(std::make_pair(node.id, node)).second;
 }
@@ -390,6 +393,14 @@ void PublicConnection::run() {
 			return;
 		}
 
+		const auto certificatePubkey =
+		    CertificateManager::get_certificate_pubkey(responsePacket->signedCSR);
+
+		if (!certificatePubkey) {
+			std::cerr << "Failed to decode peer certificate's public key\n";
+			return;
+		}
+
 		AbstractWireGuardManager::Key peerWGPubkey = {};
 		std::copy(subjectUserID.value().begin(), subjectUserID.value().end(),
 		          peerWGPubkey.begin());
@@ -397,13 +408,14 @@ void PublicConnection::run() {
 		// TODO: Don't just rely on the default WireGuard port
 		parent.add_node(Node{
 		    .id = responsePacket->allocatedNode,
-		    .controlPlanePublicKey = {},
+		    .controlPlanePublicKey = certificatePubkey.value(),
 		    .wireGuardPublicKey = peerWGPubkey,
 		    .controlPlaneIP = socket().peerAddress().host(),
 		    .controlPlanePort = 0,
 		    .wireGuardHost = Host{ socket().peerAddress().host() },
 		    .wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,
 		    .controlPlaneCertificate = responsePacket->signedCSR,
+		    .parent = packet->referringNode,
 		});
 
 		if (responsePacket) {

@@ -14,7 +14,8 @@ struct Node {
 	std::uint16_t controlPlanePort;
 	Host wireGuardHost;
 	std::uint16_t wireGuardPort;
-	X509_RAII controlPlaneCertificate = nullptr;
+	X509_RAII controlPlaneCertificate;
+	std::optional<std::uint64_t> parent;
 
 	const static std::uint16_t DEFAULT_WIREGUARD_PORT = 274;
 	const static std::array<std::uint8_t, 8> CHAINLINK_NET_PREFIX;
@@ -23,4 +24,9 @@ struct Node {
 
 	using IDRangeGenerator = std::uniform_int_distribution<std::uint64_t>;
 	static IDRangeGenerator generate_id_range();
+};
+
+struct SelfNode : public Node {
+	EVP_PKEY_RAII controlPlanePrivateKey;
+	AbstractWireGuardManager::Key wireGuardPrivateKey;
 };

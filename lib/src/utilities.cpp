@@ -117,6 +117,11 @@ std::optional<std::string> base64_encode(std::span<const std::uint8_t> bytes) {
 	return encoded;
 }
 
+std::optional<std::string> base64_encode(std::span<const char> bytes) {
+	return base64_encode(std::span<const std::uint8_t>{
+	    reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size() });
+}
+
 std::optional<std::uint64_t>
 base64_decoded_character_count(const std::uint64_t bytes) noexcept {
 	const constexpr std::uint64_t b64GroupAlignment = 3;

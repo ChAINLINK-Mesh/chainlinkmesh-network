@@ -396,7 +396,15 @@ int ServerDaemon::main(const std::vector<std::string>& args) {
 	waitForTerminationRequest();
 	server->stop();
 
+	// TODO: Install failure handler to set the interface back down.
+	get_configuration()->save("/tmp/wgmesh-config");
+
 	return EXIT_OK;
+}
+
+Poco::AutoPtr<Poco::Util::PropertyFileConfiguration>
+ServerDaemon::get_configuration() const {
+	return server->get_configuration();
 }
 
 void ServerDaemon::display_help() const {

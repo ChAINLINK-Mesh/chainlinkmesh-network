@@ -23,13 +23,11 @@ struct CertificateInfo {
 	std::uint64_t validityDuration;
 };
 
-class CertificateManager {
+template <std::integral Encoding = std::uint8_t>
+class GenericCertificateManager {
 public:
-	CertificateManager(CertificateManager&& other) = default;
-	~CertificateManager() = default;
-
-	[[nodiscard]] std::optional<Certificate> get_certificate(NodeID nodeID) const;
-	void set_certificate(NodeID nodeID, const Certificate& certificate);
+	using EncodingString = std::basic_string<Encoding>;
+	using EncodingStringView = std::basic_string_view<Encoding>;
 
 	[[nodiscard]] static std::optional<EVP_PKEY_RAII> generate_rsa_key();
 
@@ -42,25 +40,37 @@ public:
 	[[nodiscard]] static std::optional<X509_REQ_RAII>
 	generate_certificate_request(const CertificateInfo& certificateInfo);
 
-	static std::shared_ptr<CertificateManager>
+	static std::shared_ptr<GenericCertificateManager>
 	create_instance(const std::filesystem::path& certificatesFolder);
-	static std::shared_ptr<CertificateManager> get_instance();
+	static std::shared_ptr<GenericCertificateManager> get_instance();
 
 	/**
-	 * Decodes a PEM certificate representation.
+	 * @brief Gets a certificate's public key.
+	 *
+	 * @param certificate which certificate to retrieve the public key for.
+	 * @return the public key of the given certificate
+	 */
+	static std::optional<EVP_PKEY_RAII>
+	get_certificate_pubkey(const X509_RAII& certificate);
+
+	/**
+	 * @brief Decodes the given PEM bytes into a certificate.
+	 *
 	 * @param pem certificate in PEM format
-	 * @return either std::nullopt or std::unique_pointer to the certificate
-	 * structure (never nullptr)
+	 * @return either the certificate, or std::nullopt if it could not be decoded
+	 *         (never nullptr)
 	 */
-	static std::optional<X509_RAII> decode_pem_certificate(ByteStringView pem);
+	static std::optional<X509_RAII>
+	decode_pem_certificate(EncodingStringView pem);
 
 	/**
-	 * Decodes a certificate signing request in PEM representation.
+	 * @brief Decodes the given PEM bytes into a certificate signing request.
+	 *
 	 * @param pem CSR in PEM format
-	 * @return either std::nullopt or std::unique_pointer to the CSR structure
-	 * (never nullptr)
+	 * @return either the CSR, or std::nullopt if it could not be decoded
+	 *         (never nullptr)
 	 */
-	static std::optional<X509_REQ_RAII> decode_pem_csr(ByteStringView pem);
+	static std::optional<X509_REQ_RAII> decode_pem_csr(EncodingStringView pem);
 
 	/**
 	 * @brief Decodes the given PEM bytes into a private key.
@@ -70,14 +80,14 @@ public:
 	 *         not be decoded
 	 */
 	static std::optional<EVP_PKEY_RAII>
-	decode_pem_private_key(ByteStringView pem);
+	decode_pem_private_key(EncodingStringView pem);
 
 	/**
-	 * Retrieves a list of values specified for a given subject attribute Numeric
-	 * ID.
+	 * @brief Retrieves a list of values specified for a given subject attribute
+	 *        Numeric ID.
 	 *
 	 * @param subject the OpenSSL subject name. Doesn't take an owning copy of the
-	 *                data.
+	 *        data.
 	 * @param nid the subject attribute Numeric ID
 	 * @return a list of all values specified for this attribute
 	 */
@@ -85,20 +95,28 @@ public:
 	get_subject_attribute(const X509_NAME* subject, int nid);
 
 	/**
-	 * Encodes an X509 certificate to PEM format.
+	 * @brief Encodes an X509 certificate to PEM format.
 	 *
 	 * @param x509 the X509 certificate to encode
 	 * @return the PEM encoding of the given X509 certificate
 	 */
-	static ByteString encode_pem(const X509_RAII& x509);
+	static EncodingString encode_pem(const X509_RAII& x509);
 
 	/**
-	 * Encodes an X509 CSR to PEM format.
+	 * @brief Encodes an X509 CSR to PEM format.
 	 *
-	 * @param x509 the X509 CSR to encode
+	 * @param x509 the X509 CSR to encode.
 	 * @return the PEM encoding of the given X509 CSR
 	 */
-	static ByteString encode_pem(const X509_REQ_RAII& x509Req);
+	static EncodingString encode_pem(const X509_REQ_RAII& x509Req);
+
+	/**
+	 * @brief Encodes a private key to PEM format.
+	 *
+	 * @param pkey the private key to encode
+	 * @return the PEM encoding of the given private key
+	 */
+	static EncodingString encode_pem(const EVP_PKEY_RAII& pkey);
 
 	/**
 	 * @brief Signs a CSR with the given certificate and keys.
@@ -119,10 +137,6 @@ public:
 	static const constexpr std::uint32_t KEY_LENGTH = 2048;
 
 protected:
-	CertificateManager(std::filesystem::path certificatesFolder);
-
-	std::filesystem::path get_certificate_path(NodeID nodeID) const;
-
 	/**
 	 * @brief Sets up an X509 subject name structure according to the certificate
 	 * information provided.
@@ -135,13 +149,10 @@ protected:
 	x509_set_name_from_certificate_info(X509_NAME* name,
 	                                    const CertificateInfo& certificateInfo);
 
-	const std::filesystem::path certificatesFolder;
-	mutable std::map<NodeID, Certificate> certificatesMap;
-
-	static std::shared_ptr<CertificateManager> instance;
-
 	// X509v3 has version number of '2'
 	static const constexpr std::uint8_t DEFAULT_CERTIFICATE_VERSION{ 2 };
 };
+
+using CertificateManager = GenericCertificateManager<>;
 
 bool operator==(const X509_REQ& a, const X509_REQ& b);
