@@ -74,7 +74,7 @@ namespace PublicProtocol {
 
 		const constexpr static std::uint16_t MIN_PACKET_SIZE =
 		    sizeof(respondingNode) + sizeof(allocatedNode) +
-		    AbstractWireGuardManager::WG_PUBKEY_SIZE + IPV6_ADDR_SIZE +
+		    AbstractWireGuardManager::WG_KEY_SIZE + IPV6_ADDR_SIZE +
 		    IPV6_ADDR_SIZE + sizeof(respondingControlPlanePort) +
 		    sizeof(respondingWireGuardPort);
 		const constexpr static std::uint16_t MAX_PACKET_SIZE =
@@ -86,7 +86,7 @@ namespace PublicProtocol {
 	class PublicProtocolManager {
 	public:
 		struct Configuration {
-			std::string psk;
+			ByteString psk;
 			Node self;
 			EVP_PKEY_RAII controlPlanePrivateKey;
 			std::uint64_t pskTTL;
@@ -116,17 +116,17 @@ namespace PublicProtocol {
 		static const constexpr std::uint64_t DEFAULT_CERTIFICATE_VALIDITY_SECONDS =
 		    900ULL * 24ULL * 60ULL * 60ULL;
 
-		std::string get_psk() const;
+		ByteString get_psk() const;
 		std::optional<std::tuple<std::uint64_t, SHA256_Hash, SHA256_Signature>>
 		get_signed_psk() const;
 
 		std::vector<Node> get_peer_nodes() const;
 
 		const constexpr static std::uint64_t DEFAULT_PSK_TTL = 120;
-		static const std::string DEFAULT_PSK;
+		static const ByteString DEFAULT_PSK;
 
 	protected:
-		const std::string psk;
+		const ByteString psk;
 		const Node selfNode;
 		const EVP_PKEY_RAII controlPlanePrivateKey;
 		std::uint64_t pskTTL;

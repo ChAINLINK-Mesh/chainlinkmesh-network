@@ -23,7 +23,7 @@ extern "C" {
 }
 
 static_assert(sizeof(wg_device::public_key) ==
-                  AbstractWireGuardManager::WG_PUBKEY_SIZE,
+                  AbstractWireGuardManager::WG_KEY_SIZE,
               "WireGuard key size doesn't fit Node details");
 
 LinuxWireGuardManager::LinuxWireGuardManager(

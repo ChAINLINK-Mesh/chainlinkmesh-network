@@ -1,5 +1,6 @@
 #include "test.hpp"
 #include "certificates.hpp"
+#include "literals.hpp"
 #include "public-protocol.hpp"
 #include "wireguard.hpp"
 
@@ -51,10 +52,14 @@ void test_peerless() {
 	       base64_encode(config.meshPrivateKey).value());
 	assert(propFile->getString("certificate") ==
 	       Encoder::encode_pem(config.controlPlaneCertificate));
+	assert(propFile->getString("mesh-address") ==
+	       server.get_wireguard_address().toString());
 	assert(propFile->getString("public-proto-address") ==
 	       config.publicProtoAddress->toString());
-	assert(propFile->getString("private-proto-address") ==
-	       server.get_private_proto_address().toString());
+	assert(propFile->getUInt("private-proto-port") == config.privateProtoPort);
+	assert(propFile->getString("psk") ==
+	       base64_encode(config.psk.value()).value());
+	assert(propFile->getUInt64("psk-ttl") == config.pskTTL.value());
 	assert(!propFile->hasProperty("parent"));
 
 	assert(!propFile->hasProperty("key"));
@@ -142,7 +147,7 @@ Server::Configuration get_config(const std::uint64_t id,
 		.publicProtoAddress = testPorts.publicProtoAddress,
 		.privateProtoPort = testPorts.privateProtoAddress.port(),
 		.controlPlaneCertificate = certificate,
-		.psk = std::nullopt,
+		.psk = "testing-psk"_uc,
 		.pskTTL = 100,
 		.clock = std::make_shared<TestClock>(std::chrono::seconds{ 123456789 }),
 		.peers = {},

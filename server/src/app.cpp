@@ -20,12 +20,14 @@
 #include <Poco/Util/ServerApplication.h>
 #include <chrono>
 #include <cstdlib>
+#include <exception>
 #include <iostream>
-#include <literals.hpp>
 #include <memory>
 #include <stdexcept>
+#include <variant>
 
 const constexpr std::string_view SERVER_IP_PLACEHOLDER = "SERVER_IP_HERE";
+const constexpr std::string_view SERVER_CONFIG_FILE = "/tmp/chainlink.conf";
 
 void ServerDaemon::defineOptions(Poco::Util::OptionSet& options) {
 	using Poco::Util::Option;
@@ -152,11 +154,12 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 
 	X509_RAII certificate{};
 
-	std::optional<std::string> psk{};
+	std::optional<ByteString> psk{};
 
 	if (config().hasOption("psk")) {
-		psk = config().getString("psk");
-		std::cerr << "Using PSK: " << psk.value() << "\n";
+		const auto pskString = config().getString("psk");
+		std::cerr << "Using PSK: " << pskString << "\n";
+		psk = ByteString{ pskString.begin(), pskString.end() };
 	}
 
 	AbstractWireGuardManager::Key wgPrivateKey;
@@ -182,185 +185,223 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 	std::vector<Node> peers{};
 	std::optional<std::uint64_t> id{};
 
-	if (config().hasOption("server") || !config().hasOption("client")) {
-		logger().notice("Running in root CA mode");
+	Poco::AutoPtr<Poco::Util::PropertyFileConfiguration> savedConfig{};
 
-		// Generate RSA key
-		auto rsaKey = CertificateManager::generate_rsa_key();
+	try {
+		savedConfig = new Poco::Util::PropertyFileConfiguration{ std::string{
+			  SERVER_CONFIG_FILE } };
+	} catch (const Poco::FileNotFoundException& e) {
+		// Ignore failure to open config. This just indicates we have to parse the
+		// commandline flags instead.
+	}
 
-		if (!rsaKey) {
-			logger().fatal("Failed to generate server CA key\n");
-			return;
-		}
+	std::optional<Server::Configuration> configuration{};
 
-		if (auto tempCertificate = CertificateManager::generate_certificate(
-		        CertificateInfo{
-		            .country = config().getString(
-		                "country", std::string{ DEFAULT_CERT_INFO.country }),
-		            .province = config().getString(
-		                "province", std::string{ DEFAULT_CERT_INFO.province }),
-		            .city = config().getString(
-		                "city", std::string{ DEFAULT_CERT_INFO.city }),
-		            .organisation = config().getString(
-		                "organisation",
-		                std::string{ DEFAULT_CERT_INFO.organisation }),
-		            .commonName = config().getString(
-		                "common-name", std::string{ DEFAULT_CERT_INFO.commonName }),
-		            .userID = userID.value(),
-		            .validityDuration = config().getUInt64(
-		                "validity-duration", DEFAULT_CERT_INFO.validityDuration),
-		        },
-		        rsaKey.value())) {
-			certificate = std::move(tempCertificate.value());
+	if (!savedConfig.isNull() && savedConfig->has("id")) {
+		logger().notice("Using saved configuration");
+
+		const auto decodedConfiguration =
+		    Server::get_configuration_from_saved_config(savedConfig);
+
+		if (std::holds_alternative<Server::Configuration>(decodedConfiguration)) {
+			configuration = std::get<Server::Configuration>(decodedConfiguration);
 		} else {
-			logger().fatal("Failed to generate server CA certificate\n");
-			return;
+			try {
+				std::rethrow_exception(
+				    std::get<std::exception_ptr>(decodedConfiguration));
+			} catch (const std::exception& e) {
+				logger().fatal(
+				    std::string{ "Failed to decode existing configuration: " } +
+				    e.what());
+				return;
+			}
 		}
 	} else {
-		logger().notice("Running in client mode");
+		if (config().hasOption("server") || !config().hasOption("client")) {
+			logger().notice("Running in root CA mode");
 
-		auto parentAddressStr = config().getString("parent");
+			// Generate RSA key
+			auto rsaKey = CertificateManager::generate_rsa_key();
 
-		if (parentAddressStr.empty()) {
-			logger().fatal("Cannot connect to blank parent\n");
-			return;
-		}
-
-		// If the user has failed to replace the placeholder parameter from the
-		// invite.
-		if (parentAddressStr.starts_with(SERVER_IP_PLACEHOLDER)) {
-			std::cerr << "IP address of parent: ";
-			std::string parentIP{};
-			std::cin >> parentIP;
-			parentAddressStr.replace(0, SERVER_IP_PLACEHOLDER.length(), parentIP);
-		}
-
-		std::uint64_t referringNode{};
-
-		try {
-			referringNode = config().getUInt64("referrer");
-		} catch (const Poco::Util::OptionException& e) {
-			logger().fatal("Couldn't parse referrer (should be an integer)\n");
-			return;
-		}
-
-		CertificateInfo certInfo{
-			.country = config().getString("country",
-			                              std::string{ DEFAULT_CERT_INFO.country }),
-			.province = config().getString("province",
-			                               std::string{ DEFAULT_CERT_INFO.province }),
-			.city = config().getString("city", std::string{ DEFAULT_CERT_INFO.city }),
-			.organisation = config().getString(
-			    "organisation", std::string{ DEFAULT_CERT_INFO.organisation }),
-			.commonName = config().getString(
-			    "common-name", std::string{ DEFAULT_CERT_INFO.commonName }),
-			.userID = userID.value(),
-			.validityDuration = config().getUInt64(
-			    "validity-duration", DEFAULT_CERT_INFO.validityDuration),
-		};
-
-		// TODO: Replace with parameterised clock.
-		const std::uint64_t timestamp = config().getUInt64(
-		    "timestamp",
-		    std::chrono::time_point_cast<std::chrono::seconds>(SystemClock{}.now())
-		        .time_since_epoch()
-		        .count());
-
-		const auto pskHashStr = base64_decode(config().getString("pskHash"));
-		assert(pskHashStr);
-		PublicProtocol::InitialisationPacket::Hash pskHash{};
-		std::copy(pskHashStr->begin(), pskHashStr->end(), pskHash.begin());
-
-		const auto pskSignatureStr = base64_decode(config().getString("signature"));
-		assert(pskSignatureStr);
-		PublicProtocol::InitialisationPacket::Signature pskSignature{};
-		std::copy(pskSignatureStr->begin(), pskSignatureStr->end(),
-		          pskSignature.begin());
-
-		PublicProtocol::PublicProtocolClient client{
-			PublicProtocol::PublicProtocolClient::Configuration{
-			    .certInfo = certInfo,
-			    .parentAddress = Host{ parentAddressStr },
-			    .pskHash = pskHash,
-			    .pskSignature = pskSignature,
-			    .referringNode = referringNode,
-			    .timestamp = timestamp,
+			if (!rsaKey) {
+				logger().fatal("Failed to generate server CA key\n");
+				return;
 			}
+
+			if (auto tempCertificate = CertificateManager::generate_certificate(
+			        CertificateInfo{
+			            .country = config().getString(
+			                "country", std::string{ DEFAULT_CERT_INFO.country }),
+			            .province = config().getString(
+			                "province", std::string{ DEFAULT_CERT_INFO.province }),
+			            .city = config().getString(
+			                "city", std::string{ DEFAULT_CERT_INFO.city }),
+			            .organisation = config().getString(
+			                "organisation",
+			                std::string{ DEFAULT_CERT_INFO.organisation }),
+			            .commonName = config().getString(
+			                "common-name",
+			                std::string{ DEFAULT_CERT_INFO.commonName }),
+			            .userID = userID.value(),
+			            .validityDuration = config().getUInt64(
+			                "validity-duration", DEFAULT_CERT_INFO.validityDuration),
+			        },
+			        rsaKey.value())) {
+				certificate = std::move(tempCertificate.value());
+			} else {
+				logger().fatal("Failed to generate server CA certificate\n");
+				return;
+			}
+		} else {
+			logger().notice("Running in client mode");
+
+			auto parentAddressStr = config().getString("parent");
+
+			if (parentAddressStr.empty()) {
+				logger().fatal("Cannot connect to blank parent\n");
+				return;
+			}
+
+			// If the user has failed to replace the placeholder parameter from the
+			// invite.
+			if (parentAddressStr.starts_with(SERVER_IP_PLACEHOLDER)) {
+				std::cerr << "IP address of parent: ";
+				std::string parentIP{};
+				std::cin >> parentIP;
+				parentAddressStr.replace(0, SERVER_IP_PLACEHOLDER.length(), parentIP);
+			}
+
+			std::uint64_t referringNode{};
+
+			try {
+				referringNode = config().getUInt64("referrer");
+			} catch (const Poco::Util::OptionException& e) {
+				logger().fatal("Couldn't parse referrer (should be an integer)\n");
+				return;
+			}
+
+			CertificateInfo certInfo{
+				.country = config().getString("country",
+				                              std::string{ DEFAULT_CERT_INFO.country }),
+				.province = config().getString(
+				    "province", std::string{ DEFAULT_CERT_INFO.province }),
+				.city =
+				    config().getString("city", std::string{ DEFAULT_CERT_INFO.city }),
+				.organisation = config().getString(
+				    "organisation", std::string{ DEFAULT_CERT_INFO.organisation }),
+				.commonName = config().getString(
+				    "common-name", std::string{ DEFAULT_CERT_INFO.commonName }),
+				.userID = userID.value(),
+				.validityDuration = config().getUInt64(
+				    "validity-duration", DEFAULT_CERT_INFO.validityDuration),
+			};
+
+			// TODO: Replace with parameterised clock.
+			const std::uint64_t timestamp = config().getUInt64(
+			    "timestamp", std::chrono::time_point_cast<std::chrono::seconds>(
+			                     SystemClock{}.now())
+			                     .time_since_epoch()
+			                     .count());
+
+			const auto pskHashStr = base64_decode(config().getString("pskHash"));
+			assert(pskHashStr);
+			PublicProtocol::InitialisationPacket::Hash pskHash{};
+			std::copy(pskHashStr->begin(), pskHashStr->end(), pskHash.begin());
+
+			const auto pskSignatureStr =
+			    base64_decode(config().getString("signature"));
+			assert(pskSignatureStr);
+			PublicProtocol::InitialisationPacket::Signature pskSignature{};
+			std::copy(pskSignatureStr->begin(), pskSignatureStr->end(),
+			          pskSignature.begin());
+
+			PublicProtocol::PublicProtocolClient client{
+				PublicProtocol::PublicProtocolClient::Configuration{
+				    .certInfo = certInfo,
+				    .parentAddress = Host{ parentAddressStr },
+				    .pskHash = pskHash,
+				    .pskSignature = pskSignature,
+				    .referringNode = referringNode,
+				    .timestamp = timestamp,
+				}
+			};
+
+			try {
+				const auto resp = client.connect();
+				// TODO: Decode the control-plane pubkey from certificate.
+				peers.push_back(Node{
+				    .id = resp.respondingNode,
+				    .controlPlanePublicKey = {},
+				    .wireGuardPublicKey = resp.respondingWireGuardPublicKey,
+				    .controlPlaneIP = resp.respondingControlPlaneIPAddress,
+				    .controlPlanePort = resp.respondingControlPlanePort,
+				    .wireGuardHost = client.get_parent_address(resp),
+				    .wireGuardPort = resp.respondingWireGuardPort,
+				    .controlPlaneCertificate = {},
+				});
+				id = resp.allocatedNode;
+			} catch (const std::invalid_argument& e) {
+				logger().fatal(std::string{ "Invalid argument: " } + e.what() + "\n");
+				return;
+			} catch (const std::runtime_error& e) {
+				logger().fatal(std::string{ "Error: " } + e.what() + "\n");
+				return;
+			}
+		}
+
+		// TODO: load private key
+		const auto privateKey{ CertificateManager::generate_rsa_key() };
+
+		if (!privateKey) {
+			logger().fatal("Failed to generate private key\n");
+			return;
+		}
+
+		std::optional<Poco::Net::SocketAddress> publicAddress{};
+
+		if (config().hasOption("public-address")) {
+			const auto controlPlaneAddressStr = config().getString("public-address");
+			std::cerr << "Using address: " << controlPlaneAddressStr << "\n";
+
+			try {
+				publicAddress = Poco::Net::SocketAddress{ controlPlaneAddressStr };
+			} catch (const Poco::Net::InvalidAddressException& e) {
+				logger().fatal("Failed to decode the address '" +
+				               controlPlaneAddressStr + "'\n");
+				return;
+			}
+		}
+
+		const auto pskTTL = config().getUInt64(
+		    "psk-ttl", PublicProtocol::PublicProtocolManager::DEFAULT_PSK_TTL);
+		psk = psk.value_or(PublicProtocol::PublicProtocolManager::DEFAULT_PSK);
+
+		configuration = Server::Configuration{
+			.id = id,
+			.controlPlanePrivateKey = privateKey.value(),
+			.meshPublicKey = wgPublicKey,
+			.meshPrivateKey = wgPrivateKey,
+			.wireGuardAddress = Poco::Net::SocketAddress{ config().getString(
+			    "wireguard-address",
+			    "0.0.0.0:" + std::to_string(Node::DEFAULT_WIREGUARD_PORT)) },
+			.publicProtoAddress = publicAddress,
+			.privateProtoPort = std::nullopt,
+			.controlPlaneCertificate = certificate,
+			.psk = psk.value(),
+			.pskTTL = pskTTL,
+			.peers = peers,
 		};
-
-		try {
-			const auto resp = client.connect();
-			// TODO: Decode the control-plane pubkey from certificate.
-			peers.push_back(Node{
-			    .id = resp.respondingNode,
-			    .controlPlanePublicKey = {},
-			    .wireGuardPublicKey = resp.respondingWireGuardPublicKey,
-			    .controlPlaneIP = resp.respondingControlPlaneIPAddress,
-			    .controlPlanePort = resp.respondingControlPlanePort,
-			    .wireGuardHost = client.get_parent_address(resp),
-			    .wireGuardPort = resp.respondingWireGuardPort,
-			    .controlPlaneCertificate = {},
-			});
-			id = resp.allocatedNode;
-		} catch (const std::invalid_argument& e) {
-			logger().fatal(std::string{ "Invalid argument: " } + e.what() + "\n");
-			return;
-		} catch (const std::runtime_error& e) {
-			logger().fatal(std::string{ "Error: " } + e.what() + "\n");
-			return;
-		}
 	}
 
-	// TODO: load private key
-	const auto privateKey{ CertificateManager::generate_rsa_key() };
+	assert(configuration);
 
-	if (!privateKey) {
-		logger().fatal("Failed to generate private key\n");
-		return;
-	}
-
-	std::optional<Poco::Net::SocketAddress> publicAddress{};
-
-	if (config().hasOption("public-address")) {
-		const auto controlPlaneAddressStr = config().getString("public-address");
-		std::cerr << "Using address: " << controlPlaneAddressStr << "\n";
-
-		try {
-			publicAddress = Poco::Net::SocketAddress{ controlPlaneAddressStr };
-		} catch (const Poco::Net::InvalidAddressException& e) {
-			logger().fatal("Failed to decode the address '" + controlPlaneAddressStr +
-			               "'\n");
-			return;
-		}
-	}
-
-	const auto pskTTL = config().getUInt64(
-	    "psk-ttl", PublicProtocol::PublicProtocolManager::DEFAULT_PSK_TTL);
-
-	server = std::make_unique<Server>(Server::Configuration{
-	    .id = id,
-	    .controlPlanePrivateKey = privateKey.value(),
-	    .meshPublicKey = wgPublicKey,
-	    .meshPrivateKey = wgPrivateKey,
-	    .wireGuardAddress = Poco::Net::SocketAddress{ config().getString(
-	        "wireguard-address",
-	        "0.0.0.0:" + std::to_string(Node::DEFAULT_WIREGUARD_PORT)) },
-	    .publicProtoAddress = publicAddress,
-	    .privateProtoPort = std::nullopt,
-	    .controlPlaneCertificate = certificate,
-	    .psk = config().getString(
-	        "psk", PublicProtocol::PublicProtocolManager::DEFAULT_PSK),
-	    .pskTTL = pskTTL,
-	    .peers = peers,
-	});
-
-	logger().information("Using PSK: " + server->get_psk() + " (valid for " +
-	                     std::to_string(pskTTL) + " seconds)");
+	server = std::make_unique<Server>(configuration.value());
 
 	// If running in root CA mode
 	if (config().hasOption("server") || !config().hasOption("client")) {
+		const auto serverNode = server->get_self();
 		logger().information("Root server has ID: " +
-		                     std::to_string(server->get_self().id));
+		                     std::to_string(serverNode.id));
 		const auto optSignedPSK = server->get_signed_psk();
 		assert(optSignedPSK);
 		const auto [timestamp, pskHash, pskSignature] = optSignedPSK.value();
@@ -380,8 +421,8 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 		    std::to_string(timestamp) +
 		    " \\\n\t--psk-hash=" + b64EncodedHash.value() +
 		    " \\\n\t--psk-signature=" + b64EncodedSignature.value() +
-		    " \\\n\t--psk-ttl=" + std::to_string(pskTTL) +
-		    " \\\n\t--referrer=" + std::to_string(server->get_self().id) +
+		    " \\\n\t--psk-ttl=" + std::to_string(serverNode.pskTTL) +
+		    " \\\n\t--referrer=" + std::to_string(serverNode.id) +
 		    " \\\n\t--client=" + std::string{ SERVER_IP_PLACEHOLDER } + ":" +
 		    std::to_string(server->get_public_proto_address().port()) + "\n");
 	}
@@ -397,7 +438,7 @@ int ServerDaemon::main(const std::vector<std::string>& args) {
 	server->stop();
 
 	// TODO: Install failure handler to set the interface back down.
-	get_configuration()->save("/tmp/wgmesh-config");
+	get_configuration()->save(std::string{ SERVER_CONFIG_FILE });
 
 	return EXIT_OK;
 }

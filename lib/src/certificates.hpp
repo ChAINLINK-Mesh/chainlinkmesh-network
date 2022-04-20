@@ -83,6 +83,16 @@ public:
 	decode_pem_private_key(EncodingStringView pem);
 
 	/**
+	 * @brief Decodes the given PEM bytes into a public key.
+	 *
+	 * @param pem PEM encoded data, representing a public key
+	 * @return either the public key, or std::nullopt if the public key could not
+	 *         be decoded
+	 */
+	static std::optional<EVP_PKEY_RAII>
+	decode_pem_public_key(EncodingStringView pem);
+
+	/**
 	 * @brief Retrieves a list of values specified for a given subject attribute
 	 *        Numeric ID.
 	 *

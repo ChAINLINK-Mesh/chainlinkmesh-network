@@ -6,6 +6,7 @@
 #include "types.hpp"
 #include "wireguard.hpp"
 
+#include <Poco/AutoPtr.h>
 #include <Poco/Net/SocketAddress.h>
 #include <Poco/Net/TCPServer.h>
 #include <Poco/Util/MapConfiguration.h>
@@ -90,7 +91,7 @@ public:
 		/**
 		 * The PSK used to authenticate initialisation requests.
 		 */
-		std::optional<std::string> psk;
+		std::optional<ByteString> psk;
 
 		/**
 		 * The TTL for request PSK values.
@@ -139,7 +140,7 @@ public:
 	Poco::Net::SocketAddress get_private_proto_address() const;
 	Poco::Net::SocketAddress get_wireguard_address() const;
 
-	std::string get_psk() const;
+	ByteString get_psk() const;
 	std::optional<std::tuple<std::uint64_t, SHA256_Hash, SHA256_Signature>>
 	get_signed_psk() const;
 	SelfNode get_self() const;
@@ -148,6 +149,9 @@ public:
 
 	Poco::AutoPtr<Poco::Util::PropertyFileConfiguration>
 	get_configuration() const;
+
+	static Expected<Configuration> get_configuration_from_saved_config(
+	    const Poco::AutoPtr<Poco::Util::PropertyFileConfiguration>& properties);
 
 protected:
 	Node::IDRangeGenerator idRange;

@@ -53,7 +53,7 @@ void check_open_status(Server& server) {
 
 Server::Configuration get_config(const TestPorts& testPorts) {
 	const auto controlPlanePrivateKeyBytes =
-	    read_file("legitimate-ca-pubkey.pem");
+	    read_file("legitimate-ca-key.pem");
 	auto controlPlanePrivateKey =
 	    CertificateManager::decode_pem_private_key(controlPlanePrivateKeyBytes);
 	assert(controlPlanePrivateKey);

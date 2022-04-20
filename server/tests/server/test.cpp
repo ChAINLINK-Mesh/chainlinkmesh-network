@@ -21,7 +21,7 @@ struct ConnectionDetails {
 	std::uint64_t timestamp;
 };
 
-Server::Configuration get_root_config(std::uint64_t id,
+Server::Configuration get_config(std::uint64_t id,
                                       const TestPorts& testPorts);
 Server::Configuration get_child_config(const TestPorts& testPorts,
                                        const ConnectionDetails& parentDetails);
@@ -32,7 +32,7 @@ X509_RAII generate_default_certificate(const std::string& userID,
 void test() {
 	const auto rootID = rand();
 	const auto rootPorts = get_test_ports();
-	auto rootServer = get_server(get_root_config(rootID, rootPorts));
+	auto rootServer = get_server(get_config(rootID, rootPorts));
 	rootServer.start();
 
 	const auto optPSK = rootServer.get_signed_psk();
@@ -55,7 +55,7 @@ void test() {
 	rootServer.stop();
 }
 
-Server::Configuration get_root_config(const std::uint64_t id,
+Server::Configuration get_config(const std::uint64_t id,
                                       const TestPorts& testPorts) {
 	const auto privateKey = CertificateManager::generate_rsa_key();
 	assert(privateKey);

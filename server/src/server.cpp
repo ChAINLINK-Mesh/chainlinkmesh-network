@@ -1,4 +1,5 @@
 #include "server.hpp"
+#include "certificates.hpp"
 #include "clock.hpp"
 #include "linux-wireguard-manager.hpp"
 #include "private-protocol.hpp"
@@ -6,10 +7,15 @@
 #include "types.hpp"
 #include "wireguard.hpp"
 
+#include <Poco/Exception.h>
 #include <Poco/Net/SocketAddress.h>
 #include <Poco/Net/TCPServer.h>
+#include <Poco/Util/IniFileConfiguration.h>
+#include <exception>
 #include <functional>
+#include <limits>
 #include <random>
+#include <stdexcept>
 #include <utility>
 
 using PublicProtocol::PublicProtocolManager;
@@ -130,6 +136,8 @@ SelfNode Server::get_self(const Server::Configuration& config) {
 		},
 		config.controlPlanePrivateKey,
 		config.meshPrivateKey,
+		config.psk.value_or(PublicProtocolManager::DEFAULT_PSK),
+		config.pskTTL.value_or(PublicProtocolManager::DEFAULT_PSK_TTL),
 	};
 }
 
@@ -159,10 +167,12 @@ Server::get_configuration() const {
 	configuration->setString(
 	    "certificate",
 	    CertEncoder::encode_pem(serverDetails.controlPlaneCertificate));
+	configuration->setString("mesh-address", get_wireguard_address().toString());
 	configuration->setString("public-proto-address",
 	                         get_public_proto_address().toString());
-	configuration->setString("private-proto-address",
-	                         get_private_proto_address().toString());
+	configuration->setUInt("private-proto-port", privateProtoPort);
+	configuration->setString("psk", base64_encode(serverDetails.psk).value());
+	configuration->setUInt64("psk-ttl", serverDetails.pskTTL);
 
 	if (serverDetails.parent.has_value()) {
 		configuration->setUInt64("parent", serverDetails.parent.value());
@@ -174,6 +184,175 @@ Server::get_configuration() const {
 	}
 
 	return configuration;
+}
+
+Expected<Server::Configuration> Server::get_configuration_from_saved_config(
+    const Poco::AutoPtr<Poco::Util::PropertyFileConfiguration>& properties) {
+	using CertEncoder = GenericCertificateManager<char>;
+	class DecodingError : public std::runtime_error {
+		using std::runtime_error::runtime_error;
+	};
+
+	try {
+		const auto id = properties->getUInt64("id");
+		const auto controlPlanePrivateKey = CertEncoder::decode_pem_private_key(
+		    properties->getString("control-plane-private-key"));
+
+		if (!controlPlanePrivateKey) {
+			throw DecodingError{
+				"Could not decode control-plane private key as PEM"
+			};
+		}
+
+		const auto meshPublicKey =
+		    base64_decode(properties->getString("mesh-public-key"));
+
+		if (!meshPublicKey ||
+		    meshPublicKey.value().size() != AbstractWireGuardManager::WG_KEY_SIZE) {
+			throw DecodingError{ "Could not decode mesh public key as base64" };
+		}
+
+		const auto meshPrivateKey =
+		    base64_decode(properties->getString("mesh-private-key"));
+
+		if (!meshPrivateKey || meshPrivateKey.value().size() !=
+		                           AbstractWireGuardManager::WG_KEY_SIZE) {
+			throw DecodingError{ "Could not decode mesh private key as Base64" };
+		}
+
+		const auto wireGuardAddress =
+		    Poco::Net::SocketAddress{ properties->getString("mesh-address") };
+
+		const auto publicProtoAddress = Poco::Net::SocketAddress{
+			properties->getString("public-proto-address")
+		};
+
+		const auto privateProtoPort = properties->getUInt("private-proto-port");
+
+		if (privateProtoPort > std::numeric_limits<std::uint16_t>::max()) {
+			throw DecodingError{
+				"Could not decode private protocol port (too large)"
+			};
+		}
+
+		const auto controlPlaneCertificate = CertEncoder::decode_pem_certificate(
+		    properties->getString("certificate"));
+
+		if (!controlPlaneCertificate) {
+			throw DecodingError{
+				"Could not decode control plane certificate as PEM"
+			};
+		}
+
+		const auto psk = base64_decode(properties->getString("psk"));
+
+		if (!psk) {
+			throw DecodingError{ "Could not decode PSK as Base64" };
+		}
+
+		const auto pskTTL = properties->getUInt64("psk-ttl");
+
+		std::vector<Node> peers{};
+
+		Poco::Util::IniFileConfiguration::Keys keys{};
+		properties->keys("nodes", keys);
+
+		for (const auto& key : keys) {
+			const auto peerID = std::stoull(key);
+			const auto peerName = "nodes." + key;
+			const auto peerControlPlanePublicKey = CertEncoder::decode_pem_public_key(
+			    properties->getString(peerName + ".control-plane-public-key"));
+
+			if (!peerControlPlanePublicKey) {
+				throw DecodingError{ "Could not decode peer public key as PEM" };
+			}
+
+			const auto peerWireGuardPublicKey = base64_decode(
+			    properties->getString(peerName + ".wireguard-public-key"));
+
+			if (!peerWireGuardPublicKey ||
+			    peerWireGuardPublicKey->size() !=
+			        AbstractWireGuardManager::WG_KEY_SIZE) {
+				throw DecodingError{ "Could not decode peer WireGuard key as Base64" };
+			}
+
+			const auto peerControlPlaneAddress = Poco::Net::SocketAddress{
+				properties->getString(peerName + ".control-plane-address")
+			};
+
+			const auto peerWireGuardAddress = Poco::Net::SocketAddress{
+				properties->getString(peerName + ".wireguard-address")
+			};
+
+			const auto peerControlPlaneCertificate = CertEncoder::decode_pem_certificate(
+					properties->getString(peerName + ".control-plane-certificate")
+					);
+
+			if (!peerControlPlaneCertificate) {
+				throw DecodingError{ "Could not decode peer certificate as PEM" };
+			}
+
+			std::optional<std::uint64_t> peerParent{};
+
+			if (properties->has(peerName + ".parent")) {
+				peerParent = properties->getUInt64(peerName + ".parent");
+			}
+
+			Node peer{
+				.id = peerID,
+				.controlPlanePublicKey = peerControlPlanePublicKey.value(),
+				.wireGuardPublicKey = {},
+				.controlPlaneIP = peerControlPlaneAddress.host(),
+				.controlPlanePort = peerControlPlaneAddress.port(),
+				.wireGuardHost = Host{ peerWireGuardAddress.host() },
+					.wireGuardPort = peerWireGuardAddress.port(),
+				.controlPlaneCertificate = peerControlPlaneCertificate.value(),
+				.parent = peerParent,
+			};
+
+			std::copy(peerWireGuardPublicKey->begin(), peerWireGuardPublicKey->end(),
+			          peer.wireGuardPublicKey.begin());
+
+			peers.emplace_back(std::move(peer));
+		}
+
+		Configuration config{
+			.id = id,
+			.controlPlanePrivateKey = controlPlanePrivateKey.value(),
+			.meshPublicKey = {},
+			.meshPrivateKey = {},
+			.wireGuardAddress = wireGuardAddress,
+			.publicProtoAddress = publicProtoAddress,
+			.privateProtoPort = privateProtoPort,
+			.controlPlaneCertificate = controlPlaneCertificate.value(),
+			.psk = psk.value(),
+			.pskTTL = pskTTL,
+			.peers = peers,
+		};
+
+		std::copy(meshPublicKey.value().begin(), meshPublicKey.value().end(),
+		          config.meshPublicKey.begin());
+
+		std::copy(meshPrivateKey.value().begin(), meshPrivateKey.value().end(),
+		          config.meshPrivateKey.begin());
+
+		return config;
+	} catch (const Poco::NotFoundException& e) {
+		// If we cannot find a key, return failure.
+		return std::make_exception_ptr(e);
+	} catch (const Poco::SyntaxException& e) {
+		// If we find an invalid property value, return failure.
+		return std::make_exception_ptr(e);
+	} catch (const DecodingError& e) {
+		// If we cannot properly decode a propery value, return failure.
+		return std::make_exception_ptr(e);
+	} catch (const Poco::InvalidArgumentException& e) {
+		// If a property cannot be parsed by Poco, return failure.
+		return std::make_exception_ptr(e);
+	} catch (const std::invalid_argument& e) {
+		// If a number cannot be converted from string by stoull, return failure.
+		return std::make_exception_ptr(e);
+	}
 }
 
 Poco::AutoPtr<Poco::Util::MapConfiguration>
@@ -194,6 +373,7 @@ Server::get_node_configuration(const Node& node) {
 	    nodeName + ".control-plane-address",
 	    Poco::Net::SocketAddress{ node.controlPlaneIP, node.controlPlanePort }
 	        .toString());
+	// TODO: Encode the raw Host value, to avoid losing DNS lookup functionality.
 	configuration->setString(
 	    nodeName + ".wireguard-address",
 	    Poco::Net::SocketAddress{ node.wireGuardHost, node.wireGuardPort }
@@ -209,7 +389,7 @@ Server::get_node_configuration(const Node& node) {
 	return configuration;
 }
 
-std::string Server::get_psk() const {
+ByteString Server::get_psk() const {
 	return publicProtoManager.get_psk();
 }
 

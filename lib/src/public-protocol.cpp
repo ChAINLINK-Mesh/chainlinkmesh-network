@@ -1,5 +1,6 @@
 #include "public-protocol.hpp"
 #include "certificates.hpp"
+#include "literals.hpp"
 #include "types.hpp"
 #include "utilities.hpp"
 #include "wireguard.hpp"
@@ -239,7 +240,7 @@ bool PublicProtocolManager::delete_node(const Node& node) {
 	return this->nodes.erase(node.id) == 1;
 }
 
-std::string PublicProtocolManager::get_psk() const {
+ByteString PublicProtocolManager::get_psk() const {
 	return this->psk;
 }
 
@@ -310,7 +311,7 @@ std::vector<Node> PublicProtocolManager::get_peer_nodes() const {
 	return peerNodes;
 }
 
-const std::string PublicProtocolManager::DEFAULT_PSK = "Testing Key";
+const ByteString PublicProtocolManager::DEFAULT_PSK = "Testing Key"_uc;
 
 PublicProtocolManager::PublicProtocolManager(const PublicProtocolManager& other)
     : psk{ other.psk }, selfNode{ other.selfNode },
@@ -388,7 +389,7 @@ void PublicConnection::run() {
 		const auto subjectUserID = base64_decode(subjectUserIDB64[0]);
 
 		if (!subjectUserID ||
-		    subjectUserID->size() != AbstractWireGuardManager::WG_PUBKEY_SIZE) {
+		    subjectUserID->size() != AbstractWireGuardManager::WG_KEY_SIZE) {
 			std::cerr << "Peer specified an invalid base-64 user ID\n";
 			return;
 		}
@@ -542,7 +543,7 @@ InitialisationRespPacket::decode_bytes(const ByteString& bytes) {
 
 	{
 		const auto respondingWireGuardPublicKeyBytes =
-		    read(AbstractWireGuardManager::WG_PUBKEY_SIZE);
+		    read(AbstractWireGuardManager::WG_KEY_SIZE);
 
 		if (!respondingWireGuardPublicKeyBytes) {
 			return std::nullopt;

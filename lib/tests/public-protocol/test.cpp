@@ -1,5 +1,6 @@
 #include "certificates.hpp"
 #include "clock.hpp"
+#include "literals.hpp"
 #include "public-protocol.hpp"
 #include "wireguard.hpp"
 
@@ -161,7 +162,7 @@ PublicProtocolManager get_testing_protocol_manager() {
 	assert(privateKey.has_value());
 
 	PublicProtocolManager protocolManager{ PublicProtocolManager::Configuration{
-		  .psk = "Testing Key",
+		  .psk = "Testing Key"_uc,
 		  .self =
 		      Node{
 		          .id = 987654321ULL,

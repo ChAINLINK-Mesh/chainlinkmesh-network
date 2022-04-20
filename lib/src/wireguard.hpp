@@ -24,8 +24,8 @@ public:
 	 */
 	[[nodiscard]] virtual AbstractWireGuardManager* clone() const = 0;
 
-	static const constexpr std::uint32_t WG_PUBKEY_SIZE = 32;
-	using Key = std::array<std::uint8_t, WG_PUBKEY_SIZE>;
+	static const constexpr std::uint32_t WG_KEY_SIZE = 32;
+	using Key = std::array<std::uint8_t, WG_KEY_SIZE>;
 
 	struct Peer {
 		Key publicKey;
