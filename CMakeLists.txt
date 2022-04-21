@@ -15,6 +15,7 @@ find_program(MAKE_EXECUTABLE
 
 option(BUILD_SHARED_LIBS "Whether to build dynamically-linked binaries and libraries" ON)
 
+# Add local OpenSSL
 set(OPENSSL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/dependencies/openssl)
 if (NOT ${BUILD_SHARED_LIBS})
     set(OPENSSL_ADDITIONAL_CONFIG_ARG "no-shared")
@@ -27,6 +28,7 @@ ExternalProject_Add(OpenSSL SOURCE_DIR ${OPENSSL_DIR}
     INSTALL_COMMAND ${MAKE_EXECUTABLE} -j${Ncpu} -C ${OPENSSL_DIR} install
     )
 
+# Add local Poco
 set(ENABLE_ACTIVERECORD OFF CACHE BOOL "")
 set(ENABLE_ACTIVERECORD_COMPILER OFF CACHE BOOL "")
 set(ENABLE_CRYPTO OFF CACHE BOOL "")
@@ -49,6 +51,11 @@ set(ENABLE_ZIP OFF CACHE BOOL "")
 set(OPENSSL_ROOT_DIR ${OPENSSL_DIR})
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/dependencies/poco ${CMAKE_INSTALL_PREFIX}/poco)
 
+# Add local flatbuffers
+set(FLATBUFFERS_BUILD_TESTS OFF CACHE BOOL "")
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/dependencies/flatbuffers ${CMAKE_INSTALL_PREFIX}/flatbuffers)
+
+# Add local WireGuard kernel as a linkable library
 set(LINUX_WG_DIR ${CMAKE_CURRENT_SOURCE_DIR}/dependencies/embeddable-wg-library/contrib/embeddable-wg-library)
 add_library(linux-wg-interface STATIC "${LINUX_WG_DIR}/wireguard.c")
 target_include_directories(linux-wg-interface PUBLIC "${LINUX_WG_DIR}")

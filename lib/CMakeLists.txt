@@ -40,12 +40,16 @@ set(BASE_COMPILE_ARGS
     -Wno-unused-variable
     )
 
+set(SCHEMA_DIRECTORY schemas)
+file(GLOB SCHEMAS "${SCHEMA_DIRECTORY}/*.fbs")
+flatbuffers_generate_headers(TARGET schemas SCHEMAS ${SCHEMAS})
+
 add_library(${PROJECT_NAME} STATIC "${SOURCE_FILES}" "${HEADER_FILES}")
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_INSTALL_PREFIX}/include ${SRC_DIRECTORY})
 target_compile_options(${PROJECT_NAME} PRIVATE ${BASE_COMPILE_ARGS})
 set_target_properties(${PROJECT_NAME} PROPERTIES PUBLIC_HEADER "${HEADER_FILES}")
 target_link_directories(${PROJECT_NAME} PUBLIC ${CMAKE_INSTALL_PREFIX}/lib)
-target_link_libraries(${PROJECT_NAME} PUBLIC Poco::Net pthread)
+target_link_libraries(${PROJECT_NAME} PUBLIC Poco::Net pthread PRIVATE schemas)
 
 if (DEFINED ${BUILD_SHARED_LIBS} AND NOT ${BUILD_SHARED_LIBS})
     target_link_libraries(${PROJECT_NAME} PUBLIC crypto.a)

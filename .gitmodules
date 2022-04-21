@@ -8,3 +8,6 @@
 [submodule "dependencies/embeddable-wg-library"]
 	path = dependencies/embeddable-wg-library
 	url = https://git.zx2c4.com/wireguard-tools
+[submodule "dependencies/flatbuffers"]
+	path = dependencies/flatbuffers
+	url = https://github.com/google/flatbuffers.git

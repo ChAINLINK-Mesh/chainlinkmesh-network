@@ -1,0 +1,23 @@
+// Schema for messages passed about in the private protocol.
+
+namespace PrivateProtocol;
+
+table PeerInformMessage {
+	peer_id:uint64;
+	// Certificate in PEM format
+	certificate:string;
+	wireguard_address:string;
+	private_proto_port:uint16;
+}
+
+union Command {
+	PeerInformMessage
+}
+
+table Message {
+	originator:uint64;
+	command:Command;
+	signature:[ubyte];
+}
+
+root_type Message;
