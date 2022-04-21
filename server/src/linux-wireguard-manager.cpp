@@ -31,7 +31,7 @@ LinuxWireGuardManager::LinuxWireGuardManager(
     const AbstractWireGuardManager::Key& privateKey,
     std::default_random_engine randomEngine)
     : device{ new wg_device{
-	        .name = "",
+	        .name = {},
 	        .ifindex = 0,
 	        .flags = static_cast<enum wg_device_flags>(
 	            wg_device_flags::WGDEVICE_HAS_PRIVATE_KEY |

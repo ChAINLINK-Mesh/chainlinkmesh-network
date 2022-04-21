@@ -35,6 +35,9 @@ set(BASE_COMPILE_ARGS
     -Wextra
     -Wpedantic
     -Werror
+    -Wno-unused-local-typedefs
+    -Wno-unused-parameter
+    -Wno-unused-variable
     )
 
 add_library(${PROJECT_NAME} STATIC "${SOURCE_FILES}" "${HEADER_FILES}")
@@ -63,9 +66,15 @@ if (NOT ${CMAKE_CROSSCOMPILING})
     target_link_options(${PROJECT_NAME} PUBLIC -fsanitize=undefined)
 endif ()
 
-install(TARGETS ${PROJECT_NAME}
-    LIBRARY DESTINATION ${LIB_WGMESH_INSTALL_LIB_DIR}
-    PUBLIC_HEADER DESTINATION ${LIB_WGMESH_INSTALL_LIB_DIR}
+if (NOT DEFINED LIB_WGMESH_INSTALL_LIB_DIR)
+    set(LIB_WGMESH_INSTALL_LIB_DIR ".")
+endif ()
+
+install(TARGETS "${PROJECT_NAME}"
+    ARCHIVE DESTINATION "${LIB_WGMESH_INSTALL_LIB_DIR}"
+    LIBRARY DESTINATION "${LIB_WGMESH_INSTALL_LIB_DIR}"
+    PUBLIC_HEADER DESTINATION "${LIB_WGMESH_INSTALL_LIB_DIR}"
+    RUNTIME DESTINATION "${LIB_WGMESH_INSTALL_LIB_DIR}"
     )
 
 # Tests

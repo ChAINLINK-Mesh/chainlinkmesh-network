@@ -2,7 +2,7 @@
 
 #include <iostream>
 
-int main(int argc, char* argv[]) {
+int main([[maybe_unused]] int argc, char* argv[]) {
 	assert(argc > 0);
 
 	std::clog << "Running test \'" << argv[0] << "\': ";

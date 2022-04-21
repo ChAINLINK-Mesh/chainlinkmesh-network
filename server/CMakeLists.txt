@@ -24,6 +24,9 @@ set(BASE_COMPILE_ARGS
     -Wextra
     -Wpedantic
     -Werror
+    -Wno-unused-local-typedefs
+    -Wno-unused-parameter
+    -Wno-unused-variable
     )
 
 add_library("lib-${PROJECT_NAME}" STATIC ${SOURCE_FILES} ${HEADER_FILES})

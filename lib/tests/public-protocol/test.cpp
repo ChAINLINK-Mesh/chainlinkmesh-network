@@ -173,6 +173,7 @@ PublicProtocolManager get_testing_protocol_manager() {
 		          .wireGuardHost = Host{ "127.0.0.1" },
 		          .wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,
 		          .controlPlaneCertificate = certificate.value(),
+		          .parent = std::nullopt,
 		      },
 		  .controlPlanePrivateKey = privateKey.value(),
 		  .pskTTL = 100,
