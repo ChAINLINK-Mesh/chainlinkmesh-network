@@ -2,6 +2,7 @@
 #include "certificates.hpp"
 #include "clock.hpp"
 #include "linux-wireguard-manager.hpp"
+#include "literals.hpp"
 #include "public-protocol.hpp"
 #include "server.hpp"
 #include "types.hpp"
@@ -9,6 +10,7 @@
 #include "validators.hpp"
 #include "wireguard.hpp"
 
+#include <Poco/Exception.h>
 #include <Poco/Net/IPAddress.h>
 #include <Poco/Net/NetException.h>
 #include <Poco/Net/SocketAddress.h>

@@ -21,8 +21,7 @@ struct ConnectionDetails {
 	std::uint64_t timestamp;
 };
 
-Server::Configuration get_config(std::uint64_t id,
-                                      const TestPorts& testPorts);
+Server::Configuration get_config(std::uint64_t id, const TestPorts& testPorts);
 Server::Configuration get_child_config(const TestPorts& testPorts,
                                        const ConnectionDetails& parentDetails);
 CertificateInfo generate_default_certificate_info(const std::string& userID);
@@ -56,7 +55,7 @@ void test() {
 }
 
 Server::Configuration get_config(const std::uint64_t id,
-                                      const TestPorts& testPorts) {
+                                 const TestPorts& testPorts) {
 	const auto privateKey = CertificateManager::generate_rsa_key();
 	assert(privateKey);
 

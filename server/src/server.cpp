@@ -255,11 +255,11 @@ Expected<Server::Configuration> Server::get_configuration_from_saved_config(
 		std::vector<Node> peers{};
 
 		Poco::Util::IniFileConfiguration::Keys keys{};
-		properties->keys("nodes", keys);
+		properties->keys("node", keys);
 
 		for (const auto& key : keys) {
 			const auto peerID = std::stoull(key);
-			const auto peerName = "nodes." + key;
+			const auto peerName = "node." + key;
 			const auto peerControlPlanePublicKey = CertEncoder::decode_pem_public_key(
 			    properties->getString(peerName + ".control-plane-public-key"));
 
@@ -284,9 +284,9 @@ Expected<Server::Configuration> Server::get_configuration_from_saved_config(
 				properties->getString(peerName + ".wireguard-address")
 			};
 
-			const auto peerControlPlaneCertificate = CertEncoder::decode_pem_certificate(
-					properties->getString(peerName + ".control-plane-certificate")
-					);
+			const auto peerControlPlaneCertificate =
+			    CertEncoder::decode_pem_certificate(
+			        properties->getString(peerName + ".control-plane-certificate"));
 
 			if (!peerControlPlaneCertificate) {
 				throw DecodingError{ "Could not decode peer certificate as PEM" };
@@ -305,7 +305,7 @@ Expected<Server::Configuration> Server::get_configuration_from_saved_config(
 				.controlPlaneIP = peerControlPlaneAddress.host(),
 				.controlPlanePort = peerControlPlaneAddress.port(),
 				.wireGuardHost = Host{ peerWireGuardAddress.host() },
-					.wireGuardPort = peerWireGuardAddress.port(),
+				.wireGuardPort = peerWireGuardAddress.port(),
 				.controlPlaneCertificate = peerControlPlaneCertificate.value(),
 				.parent = peerParent,
 			};

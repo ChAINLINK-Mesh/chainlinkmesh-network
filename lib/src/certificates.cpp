@@ -219,7 +219,7 @@ GenericCertificateManager<Encoding>::decode_pem_private_key(
 	BIO_RAII pemBIO{ BIO_new_mem_buf(pem.data(), static_cast<int>(pem.size())) };
 
 	EVP_PKEY_RAII key{ PEM_read_bio_PrivateKey(pemBIO.get(), nullptr, nullptr,
-		                                            nullptr) };
+		                                         nullptr) };
 
 	if (!key) {
 		return std::nullopt;
@@ -237,7 +237,7 @@ GenericCertificateManager<Encoding>::decode_pem_public_key(
 	BIO_RAII pemBIO{ BIO_new_mem_buf(pem.data(), static_cast<int>(pem.size())) };
 
 	EVP_PKEY_RAII key{ PEM_read_bio_PUBKEY(pemBIO.get(), nullptr, nullptr,
-		                                        nullptr) };
+		                                     nullptr) };
 
 	if (!key) {
 		return std::nullopt;

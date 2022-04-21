@@ -5,8 +5,10 @@
 #include "wireguard.hpp"
 
 #include <Poco/Net/SocketAddress.h>
+#include <Poco/Util/AbstractConfiguration.h>
 #include <limits>
 #include <thread>
+#include <variant>
 
 extern "C" {
 #include <openssl/bio.h>
@@ -27,13 +29,16 @@ CertificateInfo generate_default_certificate_info(const std::string& userID);
 X509_RAII generate_default_certificate(const std::string& userID,
                                        const EVP_PKEY_RAII& privateKey);
 EVP_PKEY_RAII pubkey_from_private_key(const EVP_PKEY_RAII& privateKey);
+Node get_random_peer(std::optional<std::uint64_t> parentID);
 
 void test_peerless();
 void test_peers();
+void test_reload();
 
 void test() {
 	test_peerless();
 	test_peers();
+	test_reload();
 }
 
 void test_peerless() {
@@ -70,22 +75,7 @@ void test_peerless() {
 
 void test_peers() {
 	auto config = get_config(rand(), get_test_ports());
-	const auto peerConfig = get_config(rand(), get_test_ports());
-	const EVP_PKEY_RAII peerControlPlanePubkey =
-	    pubkey_from_private_key(peerConfig.controlPlanePrivateKey);
-
-	const auto peer = Node{
-		.id = peerConfig.id.value(),
-		.controlPlanePublicKey = peerControlPlanePubkey,
-		.wireGuardPublicKey = peerConfig.meshPublicKey,
-		.controlPlaneIP = AbstractWireGuardManager::get_internal_ip_address(
-		    peerConfig.id.value()),
-		.controlPlanePort = peerConfig.privateProtoPort.value(),
-		.wireGuardHost = Host{ peerConfig.wireGuardAddress.host() },
-		.wireGuardPort = peerConfig.privateProtoPort.value(),
-		.controlPlaneCertificate = peerConfig.controlPlaneCertificate,
-		.parent = config.id,
-	};
+	const auto peer = get_random_peer(config.id);
 
 	config.peers = { peer };
 	const auto server = get_server(config);
@@ -96,7 +86,7 @@ void test_peers() {
 	Poco::Util::MapConfiguration::Keys keys;
 	propFile->keys("node", keys);
 	assert(keys.size() == 1);
-	assert(keys[0] == std::to_string(peerConfig.id.value()));
+	assert(keys[0] == std::to_string(peer.id));
 
 	const auto nodeName = "node." + keys[0];
 	assert(propFile->getString(nodeName + ".control-plane-public-key") ==
@@ -113,6 +103,100 @@ void test_peers() {
 	assert(propFile->getString(nodeName + ".control-plane-certificate") ==
 	       Encoder::encode_pem(peer.controlPlaneCertificate));
 	assert(propFile->getUInt64(nodeName + ".parent") == config.id);
+}
+
+void test_reload() {
+	auto initialConfig = get_config(rand(), get_test_ports());
+
+	initialConfig.peers = { get_random_peer(initialConfig.id),
+		                      get_random_peer(initialConfig.id) };
+
+	const auto initialServer = get_server(initialConfig);
+	const auto initialProperties = initialServer.get_configuration();
+
+	const auto reloadServerConfig =
+	    Server::get_configuration_from_saved_config(initialProperties);
+	assert(std::holds_alternative<Server::Configuration>(reloadServerConfig));
+	const auto reloadServer =
+	    get_server(std::get<Server::Configuration>(reloadServerConfig));
+	const auto reloadProperties = reloadServer.get_configuration();
+
+	const std::vector<std::string> propertyNames{
+		"id",
+		"control-plane-private-key",
+		"mesh-public-key",
+		"mesh-private-key",
+		"certificate",
+		"mesh-address",
+		"public-proto-address",
+		"private-proto-port",
+		"psk",
+		"psk-ttl",
+		"parent",
+		"key",
+	};
+
+	// Test self properties
+
+	for (const auto& propertyName : propertyNames) {
+		if (!initialProperties->hasProperty(propertyName)) {
+			if (reloadProperties->hasProperty(propertyName)) {
+				throw "Didn't expect property '" + propertyName +
+				    "' in reloaded configuration, after it was not found in initial "
+				    "configuration";
+			}
+		} else {
+			if (initialProperties->getRawString(propertyName) !=
+			    reloadProperties->getRawString(propertyName)) {
+				throw "Property '" + propertyName +
+				    "' has a different value in the reloaded configuration";
+			}
+		}
+	}
+
+	// Test peer list
+	Poco::Util::AbstractConfiguration::Keys initialPeers{};
+	initialProperties->keys("node", initialPeers);
+
+	Poco::Util::AbstractConfiguration::Keys reloadPeers{};
+	reloadProperties->keys("node", reloadPeers);
+
+	for (const auto& initialPeer : initialPeers) {
+		// Check peer exists in the reloaded configuration. Avoids issues with
+		// differing node orders.
+		if (std::find(reloadPeers.begin(), reloadPeers.end(), initialPeer) ==
+		    reloadPeers.end()) {
+			throw "Could not find peer in reloaded configuration.";
+		}
+	}
+
+	const std::vector<std::string> peerProperties{
+		"control-plane-public-key",  "wireguard-public-key",
+		"control-plane-address",     "wireguard-address",
+		"control-plane-certificate", "parent",
+	};
+
+	for (const auto& initialPeer : initialPeers) {
+		const auto peerName = "node." + initialPeer;
+
+		for (const auto& peerProperty : peerProperties) {
+			const auto peerPropertyName = peerName + "." + peerProperty;
+
+			if (!initialProperties->hasProperty(peerProperty)) {
+				if (reloadProperties->hasProperty(peerProperty)) {
+					throw "Didn't expect peer property '" + peerProperty +
+					    "' in reloaded configuration when it doesn't exist in the "
+					    "initial configuration";
+				}
+			} else {
+				if (initialProperties->getRawString(peerPropertyName) !=
+				    reloadProperties->getRawString(peerPropertyName)) {
+					throw "Peer property '" + peerPropertyName +
+					    "' has a different value in the reloaded configuration";
+				}
+			}
+		}
+	}
 }
 
 Server::Configuration get_config(const std::uint64_t id,
@@ -186,4 +270,23 @@ EVP_PKEY_RAII pubkey_from_private_key(const EVP_PKEY_RAII& privateKey) {
 	assert(PEM_read_bio_PUBKEY(bio.get(), &pubkey, nullptr, nullptr) != nullptr);
 
 	return pubkey;
+}
+
+Node get_random_peer(std::optional<std::uint64_t> parentID) {
+	const auto peerConfig = get_config(rand(), get_test_ports());
+	const EVP_PKEY_RAII peerControlPlanePubkey =
+	    pubkey_from_private_key(peerConfig.controlPlanePrivateKey);
+
+	return Node{
+		.id = peerConfig.id.value(),
+		.controlPlanePublicKey = peerControlPlanePubkey,
+		.wireGuardPublicKey = peerConfig.meshPublicKey,
+		.controlPlaneIP = AbstractWireGuardManager::get_internal_ip_address(
+		    peerConfig.id.value()),
+		.controlPlanePort = peerConfig.privateProtoPort.value(),
+		.wireGuardHost = Host{ peerConfig.wireGuardAddress.host() },
+		.wireGuardPort = peerConfig.privateProtoPort.value(),
+		.controlPlaneCertificate = peerConfig.controlPlaneCertificate,
+		.parent = parentID,
+	};
 }
