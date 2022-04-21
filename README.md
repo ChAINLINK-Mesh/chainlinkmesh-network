@@ -1,3 +1,5 @@
+[![CMake Build Status](https://github.com/Crystalix007/wireguard-mesh-network/actions/workflows/cmake.yml/badge.svg)](https://github.com/Crystalix007/wireguard-mesh-network/actions/workflows/cmake.yml)
+
 # Building
 
 ## Native Toolchain
