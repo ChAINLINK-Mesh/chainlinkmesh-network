@@ -107,5 +107,7 @@ Expected<Poco::Net::IPAddress> Host::reresolve() const noexcept {
 		return std::make_exception_ptr(err);
 	} catch (Poco::IOException& err) {
 		return std::make_exception_ptr(err);
+	} catch (std::exception& err) {
+		return std::make_exception_ptr(err);
 	}
 }
