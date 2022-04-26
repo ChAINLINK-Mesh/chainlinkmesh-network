@@ -2,7 +2,7 @@
 
 namespace PrivateProtocol;
 
-table PeerInformMessage {
+table PeerInformCommand {
 	peer_id:uint64;
 	// Certificate in PEM format
 	certificate:string;
@@ -10,8 +10,13 @@ table PeerInformMessage {
 	private_proto_port:uint16;
 }
 
+table ErrorCommand {
+	error:string;
+}
+
 union Command {
-	PeerInformMessage
+	PeerInformCommand,
+	ErrorCommand,
 }
 
 table Message {
