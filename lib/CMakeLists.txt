@@ -10,6 +10,7 @@ set(HEADER_FILES
     error.hpp
     literals.hpp
     node.hpp
+    peers.hpp
     private-protocol.hpp
     public-protocol.hpp
     types.hpp
@@ -21,6 +22,7 @@ set(SOURCE_FILES
     clock.cpp
     literals.cpp
     node.cpp
+    peers.cpp
     private-protocol.cpp
     public-protocol.cpp
     types.cpp

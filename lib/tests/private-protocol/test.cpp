@@ -21,6 +21,7 @@ void create_private_protocol_manager() {
 	[[maybe_unused]] PrivateProtocol::PrivateProtocolManager manager{
 		PrivateProtocol::PrivateProtocolManager::Configuration{
 		    .controlPlanePort = get_safe_port(),
+		    .peers = std::make_shared<Peers>(),
 		},
 	};
 }

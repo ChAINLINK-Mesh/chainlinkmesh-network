@@ -1,8 +1,11 @@
 #include "private-protocol.hpp"
 
 namespace PrivateProtocol {
-	PrivateProtocolManager::PrivateProtocolManager(Configuration config)
-	    : controlPlanePort{ config.controlPlanePort } {}
+	PrivateProtocolManager::PrivateProtocolManager(const Configuration& config)
+	    : controlPlanePort{ config.controlPlanePort }, peers{ config.peers } {
+		// Prevent nullptr being passed.
+		assert(config.peers);
+	}
 
 	std::optional<MessageT>
 	PrivateProtocolManager::decode_packet(const std::span<std::uint8_t>& bytes) {
