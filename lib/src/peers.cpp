@@ -1,5 +1,8 @@
 #include "peers.hpp"
 
+#include <Poco/Net/IPAddress.h>
+#include <variant>
+
 Peers::Peers(const Peers& other) {
 	// Guard against assigning to ourselves.
 	std::unique_lock<std::mutex> otherNodesLock{ other.nodesMutex };
@@ -35,13 +38,15 @@ Peers& Peers::operator=(Peers&& other) noexcept {
 	return *this;
 }
 
-void Peers::add_peer(Node node) {
+bool Peers::add_peer(Node node) {
+	assert(validate_peer(node));
 	std::unique_lock<std::mutex> peersLock{ nodesMutex };
 
-	this->nodes.insert(std::make_pair(node.id, std::move(node)));
+	return this->nodes.insert(std::make_pair(node.id, std::move(node))).second;
 }
 
 void Peers::update_peer(Node node) {
+	assert(validate_peer(node));
 	std::unique_lock<std::mutex> peersLock{ nodesMutex };
 
 	this->nodes.insert_or_assign(node.id, std::move(node));
@@ -72,8 +77,20 @@ std::vector<Node> Peers::get_peers() const {
 	return peers;
 }
 
-void Peers::delete_peer(const std::uint64_t nodeID) {
+std::optional<Node> Peers::delete_peer(const std::uint64_t nodeID) {
 	std::unique_lock<std::mutex> peersLock{ nodesMutex };
 
-	const auto peer = nodes.erase(nodeID);
+	if (const auto peerIter = nodes.find(nodeID); peerIter != nodes.end()) {
+		auto peer = std::move(peerIter->second);
+		nodes.erase(nodeID);
+		return peer;
+	}
+
+	return std::nullopt;
+}
+
+bool Peers::validate_peer(const Node& peer) {
+	return peer.controlPlanePublicKey != nullptr &&
+	       static_cast<bool>(peer.wireGuardHost) &&
+	       peer.controlPlaneCertificate != nullptr;
 }

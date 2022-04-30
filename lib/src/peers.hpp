@@ -5,6 +5,7 @@
 #include <map>
 #include <mutex>
 #include <optional>
+#include <vector>
 
 /**
  * @brief The class representing a node's peers.
@@ -44,6 +45,8 @@ public:
 	 */
 	Peers(const std::vector<Node>& nodes);
 
+	virtual ~Peers() = default;
+
 	/**
 	 * @brief Copy-assigns another Peers list to this.
 	 *
@@ -68,18 +71,23 @@ public:
 	 *
 	 *        Will not update existing nodes.
 	 *
+	 *        Expects peer node to be valid.
+	 *
 	 * @param node The peer node to add.
+	 * @return Whether the insertion occurred.
 	 */
-	void add_peer(Node node);
+	virtual bool add_peer(Node node);
 
 	/**
 	 * @brief Updates a node in the list of peers.
 	 *
 	 *        Will add non-existant nodes.
 	 *
+	 *        Expects peer node to be valid.
+	 *
 	 * @param node The peer node to update.
 	 */
-	void update_peer(Node node);
+	virtual void update_peer(Node node);
 
 	/**
 	 * @brief Gets a peer from a node's ID.
@@ -87,23 +95,26 @@ public:
 	 * @param nodeID The ID of the node to return.
 	 * @return Either the node if found, or std::nullopt.
 	 */
-	std::optional<Node> get_peer(std::uint64_t nodeID) const;
+	virtual std::optional<Node> get_peer(std::uint64_t nodeID) const;
 
 	/**
 	 * @brief Gets all peers.
 	 *
 	 * @return A vector of all peer nodes known.
 	 */
-	std::vector<Node> get_peers() const;
+	virtual std::vector<Node> get_peers() const;
 
 	/**
 	 * @brief Deletes a node from the list of peers.
 	 *
 	 * @param nodeID The ID of the node to delete.
+	 * @return Deleted peer if it was deleted.
 	 */
-	void delete_peer(std::uint64_t nodeID);
+	virtual std::optional<Node> delete_peer(std::uint64_t nodeID);
 
 protected:
 	mutable std::mutex nodesMutex;
 	std::map<std::uint64_t, Node> nodes;
+
+	static bool validate_peer(const Node& peer);
 };

@@ -14,64 +14,89 @@
 #include <exception>
 #include <functional>
 #include <limits>
+#include <mutex>
 #include <random>
 #include <stdexcept>
 #include <utility>
 
 using PublicProtocol::PublicProtocolManager;
 
-LinuxPublicProtocolManager::LinuxPublicProtocolManager(
-    Configuration config, std::function<bool(const Node& node)> addNodeCallback)
-    : PublicProtocolManager{ std::move(config) }, addNodeCallback{ std::move(
-	                                                    addNodeCallback) } {}
+LinuxPeers::LinuxPeers(LinuxWireGuardManager& wireguardManager)
+    : wireguardManager{ wireguardManager } {}
 
-bool LinuxPublicProtocolManager::add_node(const Node& node) {
-	PublicProtocolManager::add_node(node);
-	return addNodeCallback(node);
+LinuxPeers::LinuxPeers(const std::vector<Node>& nodes,
+                       LinuxWireGuardManager& wireguardManager)
+    : Peers{ nodes }, wireguardManager{ wireguardManager } {}
+
+LinuxPeers::LinuxPeers(LinuxPeers&& other) noexcept
+    : Peers{ std::move(other) }, wireguardManager{ other.wireguardManager } {}
+
+bool LinuxPeers::add_peer(Node node) {
+	std::unique_lock<std::mutex> wireguardManagerLock{ wireguardManagerMutex };
+	const auto addedPeer = Peers::add_peer(node);
+
+	if (addedPeer) {
+		wireguardManager.add_peer(node);
+	}
+
+	return addedPeer;
+}
+
+void LinuxPeers::update_peer(Node node) {
+	std::unique_lock<std::mutex> wireguardManagerLock{ wireguardManagerMutex };
+	Peers::update_peer(node);
+
+	wireguardManager.remove_peer(node);
+	wireguardManager.add_peer(node);
+}
+
+std::optional<Node> LinuxPeers::delete_peer(std::uint64_t nodeID) {
+	std::unique_lock<std::mutex> wireguardManagerLock{ wireguardManagerMutex };
+	auto peer = Peers::delete_peer(nodeID);
+
+	if (peer) {
+		wireguardManager.remove_peer(peer.value());
+	}
+
+	return peer;
 }
 
 // Assign default socket addresses if custom addresses are not specified.
 Server::Server(const Server::Configuration& config)
     : randomEngine{ config.randomEngine.value_or(
 	        std::default_random_engine{ std::random_device{}() }) },
-      self{ this->get_self(config) },
+      self{ this->get_self(config) }, wgManager{ this->self, config.peers,
+	                                               config.meshPrivateKey,
+	                                               randomEngine },
+      peers{ std::make_shared<LinuxPeers>(config.peers, wgManager) },
       publicProtoAddress{ config.publicProtoAddress.value_or(
 	        default_public_proto_address(config.wireGuardAddress)) },
       privateProtoPort{ self.controlPlanePort },
       wireGuardAddress{ config.wireGuardAddress },
-      publicProtoManager{
-	      PublicProtocolManager::Configuration{
-	          // TODO: replace with a cryptographically secure PSK-generation
-	          // function
-	          .psk = config.psk.value_or(PublicProtocolManager::DEFAULT_PSK),
-	          .self = self,
-	          .controlPlanePrivateKey = config.controlPlanePrivateKey,
-	          .pskTTL =
-	              config.pskTTL.value_or(PublicProtocolManager::DEFAULT_PSK_TTL),
-	          .clock = config.clock.value_or(std::make_shared<SystemClock>()),
-	          .peers = config.peers,
-	          .randomEngine = randomEngine,
-	      },
-	      [t = this](const Node& node) { return t->add_node(node); }
-      },
+      publicProtoManager{ PublicProtocolManager::Configuration{
+	        // TODO: replace with a cryptographically secure PSK-generation
+	        // function
+	        .psk = config.psk.value_or(PublicProtocolManager::DEFAULT_PSK),
+	        .self = self,
+	        .controlPlanePrivateKey = config.controlPlanePrivateKey,
+	        .pskTTL =
+	            config.pskTTL.value_or(PublicProtocolManager::DEFAULT_PSK_TTL),
+	        .clock = config.clock.value_or(std::make_shared<SystemClock>()),
+	        .peers = peers,
+	        .randomEngine = randomEngine,
+	    } },
       idRange{ Node::generate_id_range() } {}
 
 void Server::start() {
 	// Semantics unclear for repeated starts.
 	assert(!execution.has_value());
 
-	// TODO: Prefill the interface with a list of saved other nodes.
-	LinuxWireGuardManager wgManager{ this->self,
-		                               this->publicProtoManager.get_peer_nodes(),
-		                               this->self.wireGuardPrivateKey,
-		                               randomEngine };
 	wgManager.setup_interface();
 	execution.emplace(ServerExecution{
 	    .publicProtoServer = this->publicProtoManager.start(
 	        Poco::Net::ServerSocket{ this->publicProtoAddress },
 	        Server::public_tcp_server_params()),
 	    .privateProtoServer = {},
-	    .wgManager = std::move(wgManager),
 	});
 }
 
@@ -89,7 +114,7 @@ void Server::stop() {
 		execution->privateProtoServer->stop();
 	}
 
-	execution->wgManager.teardown_interface();
+	wgManager.teardown_interface();
 }
 
 Poco::Net::SocketAddress Server::get_public_proto_address() const {
@@ -411,7 +436,7 @@ Poco::Net::SocketAddress Server::default_public_proto_address(
 bool Server::add_node(const Node& node) {
 	assert(execution.has_value());
 
-	execution->wgManager.add_peer(AbstractWireGuardManager::Peer{
+	wgManager.add_peer(AbstractWireGuardManager::Peer{
 	    .publicKey = node.wireGuardPublicKey,
 	    // We cannot be sure about where nodes will connect from if we are the
 	    // server.

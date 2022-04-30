@@ -17,17 +17,26 @@
 
 // Specialisation, which can specifically handle peers joining the Linux WG
 // interface.
-class LinuxPublicProtocolManager
-    : public PublicProtocol::PublicProtocolManager {
+class LinuxPeers : public Peers {
 public:
-	LinuxPublicProtocolManager(
-	    Configuration config,
-	    std::function<bool(const Node& node)> addNodeCallback);
+	LinuxPeers(LinuxWireGuardManager& wireguardManager);
+	LinuxPeers(const std::vector<Node>& nodes,
+	           LinuxWireGuardManager& wireguardManager);
+	/**
+	 * @brief Copy constructor is deleted, as the wireguardManager reference
+	 * member would be shared, and the mutex would not be, hence accesses would
+	 * not be synchronised.
+	 */
+	LinuxPeers(const LinuxPeers& other) = delete;
+	LinuxPeers(LinuxPeers&& other) noexcept;
 
-	bool add_node(const Node& node) override;
+	bool add_peer(Node node) override;
+	void update_peer(Node node) override;
+	std::optional<Node> delete_peer(std::uint64_t nodeID) override;
 
 protected:
-	std::function<bool(const Node& peer)> addNodeCallback;
+	std::mutex wireguardManagerMutex;
+	LinuxWireGuardManager& wireguardManager;
 };
 
 class Server {
@@ -157,15 +166,16 @@ protected:
 	Node::IDRangeGenerator idRange;
 	std::default_random_engine randomEngine;
 	SelfNode self;
+	LinuxWireGuardManager wgManager;
+	std::shared_ptr<LinuxPeers> peers;
 	Poco::Net::SocketAddress publicProtoAddress;
 	std::uint16_t privateProtoPort;
 	Poco::Net::SocketAddress wireGuardAddress;
-	LinuxPublicProtocolManager publicProtoManager;
+	PublicProtocol::PublicProtocolManager publicProtoManager;
 
 	struct ServerExecution {
 		std::unique_ptr<Poco::Net::TCPServer> publicProtoServer;
 		std::unique_ptr<Poco::Net::TCPServer> privateProtoServer;
-		LinuxWireGuardManager wgManager;
 	};
 
 	std::optional<ServerExecution> execution;

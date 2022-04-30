@@ -4,6 +4,7 @@
 #include "clock.hpp"
 #include "error.hpp"
 #include "node.hpp"
+#include "peers.hpp"
 #include "utilities.hpp"
 #include "wireguard.hpp"
 
@@ -11,6 +12,7 @@
 #include <Poco/Net/IPAddress.h>
 #include <Poco/Net/TCPServer.h>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <random>
@@ -90,7 +92,7 @@ namespace PublicProtocol {
 			EVP_PKEY_RAII controlPlanePrivateKey;
 			std::uint64_t pskTTL;
 			Clock clock;
-			std::vector<Node> peers;
+			std::shared_ptr<Peers> peers;
 			std::default_random_engine randomEngine;
 		};
 
@@ -106,10 +108,6 @@ namespace PublicProtocol {
 
 		std::optional<InitialisationRespPacket>
 		create_response(InitialisationPacket packet);
-
-		virtual bool add_node(const Node& node);
-		std::optional<Node> get_node(std::uint64_t nodeID) const;
-		virtual bool delete_node(const Node& node);
 
 		// TODO: Review this validity period.
 		static const constexpr std::uint64_t DEFAULT_CERTIFICATE_VALIDITY_SECONDS =
@@ -132,9 +130,7 @@ namespace PublicProtocol {
 		const Clock clock;
 		std::uniform_int_distribution<std::uint64_t> idDistribution;
 		std::default_random_engine randomEngine;
-
-		mutable std::mutex nodesMutex;
-		std::map<std::uint64_t, Node> nodes;
+		std::shared_ptr<Peers> peers;
 
 		std::optional<InitialisationPacket> decode_packet(BufferType& buffer) const;
 
@@ -177,6 +173,8 @@ namespace PublicProtocol {
 		};
 
 		PublicProtocolClient(Configuration config);
+		virtual ~PublicProtocolClient() = default;
+
 		InitialisationRespPacket connect();
 		[[nodiscard]] Host
 		get_parent_address(const InitialisationRespPacket& response) const;

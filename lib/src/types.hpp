@@ -159,7 +159,8 @@ public:
 	Expected<Poco::Net::IPAddress> resolve() const noexcept;
 
 	/**
-	 * @brief Checks whether the host is valid.
+	 * @brief Checks whether the host is valid. Will not attempt to re-resolve
+	 * addresses.
 	 *
 	 * @return True if the host resolves (i.e. is valid).
 	 */

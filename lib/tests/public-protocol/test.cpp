@@ -179,7 +179,7 @@ PublicProtocolManager get_testing_protocol_manager() {
 		  .pskTTL = 100,
 		  .clock = std::make_shared<TestClock>(std::chrono::seconds{
 		      123456789 }), // I.e. the same second the PSK was generated
-		  .peers = {},
+		  .peers = std::make_shared<Peers>(),
 		  .randomEngine = std::default_random_engine{ std::random_device{}() },
 	} };
 

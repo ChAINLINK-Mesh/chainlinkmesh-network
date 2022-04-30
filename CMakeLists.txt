@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.12)
 project(WireguardMeshNetwork)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_INSTALL_PREFIX ${CMAKE_CURRENT_BINARY_DIR})
+set(LLVM_ENABLE_RTTI ON)
 
 include(CTest)
 include(ExternalProject)

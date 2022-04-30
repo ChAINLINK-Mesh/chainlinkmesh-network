@@ -35,17 +35,13 @@ PublicProtocolManager::PublicProtocolManager(Configuration config)
     : psk{ std::move(config.psk) }, selfNode{ std::move(config.self) },
       controlPlanePrivateKey{ std::move(config.controlPlanePrivateKey) },
       pskTTL{ config.pskTTL }, clock{ config.clock },
-      idDistribution{ Node::generate_id_range() }, randomEngine{
-	      config.randomEngine
-      } {
+      idDistribution{ Node::generate_id_range() },
+      randomEngine{ config.randomEngine }, peers{ config.peers } {
 	// Ensure that the current node's host is specified as a valid address.
 	assert(selfNode.wireGuardHost);
+	assert(peers);
 
-	this->nodes.insert(std::make_pair(selfNode.id, selfNode));
-
-	for (const auto& peer : config.peers) {
-		this->nodes.insert(std::make_pair(peer.id, peer));
-	}
+	this->peers->add_peer(selfNode);
 }
 
 std::unique_ptr<Poco::Net::TCPServer>
@@ -129,7 +125,8 @@ PublicProtocolManager::decode_packet(BufferType& buffer) const {
 		}
 
 		// Do not have details registered for referring node.
-		if (referringNode = this->get_node(packet.referringNode); !referringNode) {
+		if (referringNode = this->peers->get_peer(packet.referringNode);
+		    !referringNode) {
 			std::cerr << "Initialisation request originates from unknown node\n";
 			return std::nullopt;
 		}
@@ -215,31 +212,6 @@ PublicProtocolManager::decode_packet(ByteStringView buffer) {
 	return decode_packet(fifoBuffer);
 }
 
-bool PublicProtocolManager::add_node(const Node& node) {
-	assert(node.controlPlaneCertificate != nullptr);
-	assert(node.controlPlanePublicKey != nullptr);
-
-	std::lock_guard<std::mutex> nodesLock{ nodesMutex };
-	return this->nodes.insert(std::make_pair(node.id, node)).second;
-}
-
-std::optional<Node>
-PublicProtocolManager::get_node(std::uint64_t nodeID) const {
-	std::lock_guard<std::mutex> nodesLock{ nodesMutex };
-	const auto value = this->nodes.find(nodeID);
-
-	if (value == this->nodes.end()) {
-		return std::nullopt;
-	}
-
-	return value->second;
-}
-
-bool PublicProtocolManager::delete_node(const Node& node) {
-	std::lock_guard<std::mutex> nodesLock{ nodesMutex };
-	return this->nodes.erase(node.id) == 1;
-}
-
 ByteString PublicProtocolManager::get_psk() const {
 	return this->psk;
 }
@@ -295,17 +267,15 @@ PublicProtocolManager::get_signed_psk() const {
 }
 
 std::vector<Node> PublicProtocolManager::get_peer_nodes() const {
-	std::lock_guard<std::mutex> peerLock{ this->nodesMutex };
 	std::vector<Node> peerNodes{};
-	peerNodes.reserve(this->nodes.size());
 
-	for (const auto& [id, n] : this->nodes) {
+	for (auto node : this->peers->get_peers()) {
 		// Don't return the current node in list of peers.
-		if (id == this->selfNode.id) {
+		if (node.id == this->selfNode.id) {
 			continue;
 		}
 
-		peerNodes.push_back(n);
+		peerNodes.push_back(std::move(node));
 	}
 
 	return peerNodes;
@@ -317,9 +287,9 @@ PublicProtocolManager::PublicProtocolManager(const PublicProtocolManager& other)
     : psk{ other.psk }, selfNode{ other.selfNode },
       controlPlanePrivateKey{ EVP_PKEY_dup(
 	        other.controlPlanePrivateKey.get()) },
-      clock{ other.clock } {
-	std::scoped_lock nodesLock{ other.nodesMutex, this->nodesMutex };
-	this->nodes = other.nodes;
+      clock{ other.clock }, peers{ other.peers } {
+	assert(peers);
+	assert(controlPlanePrivateKey);
 }
 
 std::optional<InitialisationRespPacket>
@@ -407,11 +377,12 @@ void PublicConnection::run() {
 		          peerWGPubkey.begin());
 
 		// TODO: Don't just rely on the default WireGuard port
-		parent.add_node(Node{
+		parent.peers->add_peer(Node{
 		    .id = responsePacket->allocatedNode,
 		    .controlPlanePublicKey = certificatePubkey.value(),
 		    .wireGuardPublicKey = peerWGPubkey,
-		    .controlPlaneIP = socket().peerAddress().host(),
+		    .controlPlaneIP = AbstractWireGuardManager::get_internal_ip_address(
+		        responsePacket->allocatedNode),
 		    .controlPlanePort = 0,
 		    .wireGuardHost = Host{ socket().peerAddress().host() },
 		    .wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,

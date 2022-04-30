@@ -44,7 +44,7 @@ LinuxWireGuardManager::LinuxWireGuardManager(
 	        .first_peer = nullptr,
 	        .last_peer = nullptr,
 	    } },
-      interfaceUp{ false }, ownIP{ self.controlPlaneIP } {
+      selfID{ self.id }, interfaceUp{ false }, ownIP{ self.controlPlaneIP } {
 	// TODO: Double-check this name generation.
 	std::uniform_int_distribution<std::uint16_t> interfaceDistribution{
 		std::numeric_limits<std::uint16_t>::min(),
@@ -60,12 +60,12 @@ LinuxWireGuardManager::LinuxWireGuardManager(
 	wg_peer** prevPeer = nullptr;
 
 	for (const auto& node : nodes) {
-		auto* const peer = LinuxWireGuardManager::wg_peer_from_peer(Peer{
-		    .publicKey = node.wireGuardPublicKey,
-		    .endpoint =
-		        Poco::Net::SocketAddress{ node.wireGuardHost, node.wireGuardPort },
-		    .internalAddress = node.controlPlaneIP,
-		});
+		if (node.id == selfID) {
+			continue;
+		}
+
+		auto* const peer =
+		    LinuxWireGuardManager::wg_peer_from_peer(peer_from_node(node));
 
 		if (prevPeer == nullptr) {
 			device->first_peer = peer;
@@ -184,6 +184,7 @@ void LinuxWireGuardManager::setup_interface() {
 
 void LinuxWireGuardManager::add_peer(const Peer& peer) {
 	auto* const wgPeer = LinuxWireGuardManager::wg_peer_from_peer(peer);
+	[[maybe_unused]] const auto peerSocket = peer.endpoint.value();
 	// teardown_interface();
 
 	if (device->last_peer == nullptr) {
@@ -195,6 +196,11 @@ void LinuxWireGuardManager::add_peer(const Peer& peer) {
 	device->last_peer = wgPeer;
 	// setup_interface();
 
+	// If the interface is not up, don't try and reset its state.
+	if (!interfaceUp) {
+		return;
+	}
+
 	if (const auto ret = wg_set_device(device.get()); ret < 0) {
 		throw std::runtime_error{
 			"Failed to reconfigure WG interface with error: " + std::to_string(ret)
@@ -202,7 +208,22 @@ void LinuxWireGuardManager::add_peer(const Peer& peer) {
 	}
 }
 
-void LinuxWireGuardManager::remove_peer(const Peer& peer) {}
+void LinuxWireGuardManager::add_peer(const Node& node) {
+	// Ignore requests to add own node.
+	if (node.id == selfID) {
+		return;
+	}
+
+	add_peer(peer_from_node(node));
+}
+
+void LinuxWireGuardManager::remove_peer(const Peer& peer) {
+	throw std::runtime_error{ "Unimplemented method called" };
+}
+
+void LinuxWireGuardManager::remove_peer(const Node& node) {
+	remove_peer(peer_from_node(node));
+}
 
 void LinuxWireGuardManager::teardown_interface() {
 	// If the interface is not up, opportunistically return.
@@ -406,4 +427,14 @@ wg_peer* LinuxWireGuardManager::wg_peer_from_peer(const Peer& peer) {
 	}
 
 	return wgPeer;
+}
+
+LinuxWireGuardManager::Peer
+LinuxWireGuardManager::peer_from_node(const Node& node) {
+	return Peer{
+		.publicKey = node.wireGuardPublicKey,
+		.endpoint =
+		    Poco::Net::SocketAddress{ node.wireGuardHost, node.wireGuardPort },
+		.internalAddress = node.controlPlaneIP,
+	};
 }

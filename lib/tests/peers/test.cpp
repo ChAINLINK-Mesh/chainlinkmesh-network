@@ -64,10 +64,18 @@ void add_peers() {
 	Peers peers{};
 
 	const auto randPeer = get_random_peer(std::nullopt);
-	peers.add_peer(randPeer);
+
+	if (!peers.add_peer(randPeer)) {
+		throw "Peers::add_peer(Node node) didn't add unique peer node";
+	}
 
 	if (!peers.get_peer(randPeer.id).has_value()) {
-		throw "Peers::add_peer(Node node) failed to add peer node";
+		throw "Cannot get peer added by Peers::add_peer(Node node)";
+	}
+
+	if (peers.add_peer(randPeer)) {
+		throw "Peers::add_peer(Node node) incorrectly reports success adding "
+		      "duplicate node";
 	}
 }
 
@@ -75,15 +83,22 @@ void delete_peers() {
 	const auto randPeer = get_random_peer(std::nullopt);
 	Peers peers{ std::vector{ randPeer } };
 
-	peers.delete_peer(randPeer.id);
+	if (!peers.delete_peer(randPeer.id)) {
+		throw "Peers::delete_peer(std::uint64_t nodeID) failed to delete valid "
+		      "peer";
+	}
 
 	if (!peers.get_peers().empty()) {
-		throw "Peers doesn't correctly delete peer nodes";
+		throw "Peers still contains deleted peer nodes";
 	}
 
 	// Try deleting unknown peer ID.
 	try {
-		peers.delete_peer(randPeer.id + 1);
+		if (peers.delete_peer(randPeer.id + 1)) {
+			throw "Incorrectly reported successful deletion of invalid peer";
+		}
+	} catch (char /* forwarded */[]) {
+		throw;
 	} catch (...) {
 		throw "Peers throws deleting unknown peer node";
 	}
