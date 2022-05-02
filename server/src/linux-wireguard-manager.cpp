@@ -1,4 +1,6 @@
 #include "linux-wireguard-manager.hpp"
+#include "error.hpp"
+#include "literals.hpp"
 #include "utilities.hpp"
 #include "wireguard.hpp"
 
@@ -44,7 +46,9 @@ LinuxWireGuardManager::LinuxWireGuardManager(
 	        .first_peer = nullptr,
 	        .last_peer = nullptr,
 	    } },
-      selfID{ self.id }, interfaceUp{ false }, ownIP{ self.controlPlaneIP } {
+      selfID{ self.id }, parentID{ self.parent }, interfaceUp{ false }, ownIP{
+	      self.controlPlaneIP
+      } {
 	// TODO: Double-check this name generation.
 	std::uniform_int_distribution<std::uint16_t> interfaceDistribution{
 		std::numeric_limits<std::uint16_t>::min(),
@@ -399,7 +403,7 @@ wg_peer* LinuxWireGuardManager::wg_peer_from_peer(const Peer& peer) {
 			},
 			.rx_bytes = 0,
 			.tx_bytes = 0,
-			.persistent_keepalive_interval = 25,
+			.persistent_keepalive_interval = peer.keepalive_interval,
 			.first_allowedip = ip,
 			.last_allowedip = ip,
 			.next_peer = nullptr,
@@ -430,11 +434,14 @@ wg_peer* LinuxWireGuardManager::wg_peer_from_peer(const Peer& peer) {
 }
 
 LinuxWireGuardManager::Peer
-LinuxWireGuardManager::peer_from_node(const Node& node) {
+LinuxWireGuardManager::peer_from_node(const Node& node) const {
 	return Peer{
 		.publicKey = node.wireGuardPublicKey,
 		.endpoint =
 		    Poco::Net::SocketAddress{ node.wireGuardHost, node.wireGuardPort },
 		.internalAddress = node.controlPlaneIP,
+		.keepalive_interval = (parentID.has_value() && node.id == parentID.value())
+		                          ? KEEPALIVE_INTERVAL
+		                          : 0_u16,
 	};
 }

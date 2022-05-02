@@ -55,6 +55,14 @@ public:
 		std::optional<std::uint64_t> id;
 
 		/**
+		 * @parent The parent node's ID.
+		 *
+		 * A value of std::nullopt indicates that this node does not have a parent,
+		 * i.e. it is the root node.
+		 */
+		std::optional<std::uint64_t> parent;
+
+		/**
 		 * The control-plane private key
 		 *
 		 * Used to sign messages to other peers.

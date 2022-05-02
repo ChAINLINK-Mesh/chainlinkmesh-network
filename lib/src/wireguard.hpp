@@ -28,9 +28,27 @@ public:
 	using Key = std::array<std::uint8_t, WG_KEY_SIZE>;
 
 	struct Peer {
+		/**
+		 * @publicKey The key used to identify this node and encrypt traffic.
+		 */
 		Key publicKey;
+
+		/**
+		 * @endpoint The internet IP and port of the WireGuard service running on
+		 * this host.
+		 */
 		std::optional<Poco::Net::SocketAddress> endpoint;
+
+		/**
+		 * @internalAddress The WireGuard address to assign to this host.
+		 */
 		Poco::Net::IPAddress internalAddress;
+
+		/**
+		 * @keepalive_interval The number of seconds between keepalive heartbeat
+		 * messages. A value of 0 will disable keepalive.
+		 */
+		std::uint16_t keepalive_interval;
 	};
 
 	/**
@@ -62,6 +80,8 @@ public:
 	virtual void teardown_interface() = 0;
 
 	Poco::Net::IPAddress static get_internal_ip_address(std::uint64_t nodeID);
+
+	const constexpr static std::uint16_t KEEPALIVE_INTERVAL = 25;
 };
 
 void delete_wireguard_manager(AbstractWireGuardManager* wgManager);

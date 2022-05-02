@@ -64,11 +64,12 @@ protected:
 	                  FunctionCopier<LinuxWireGuardManager::clone_wg_device>>
 	    device;
 	std::uint64_t selfID;
+	std::optional<std::uint64_t> parentID;
 	bool interfaceUp;
 	Poco::Net::IPAddress ownIP;
 
 	static wg_peer* wg_peer_from_peer(const Peer& peer);
-	static Peer peer_from_node(const Node& node);
+	[[nodiscard]] Peer peer_from_node(const Node& node) const;
 
 	static void setup_interface(wg_device& device);
 };

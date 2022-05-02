@@ -186,6 +186,7 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 
 	std::vector<Node> peers{};
 	std::optional<std::uint64_t> id{};
+	std::optional<std::uint64_t> parent{};
 
 	Poco::AutoPtr<Poco::Util::PropertyFileConfiguration> savedConfig{};
 
@@ -342,6 +343,7 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 				    .controlPlaneCertificate = {},
 				});
 				id = resp.allocatedNode;
+				parent = resp.respondingNode;
 			} catch (const std::invalid_argument& e) {
 				logger().fatal(std::string{ "Invalid argument: " } + e.what() + "\n");
 				return;
@@ -380,6 +382,7 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 
 		configuration = Server::Configuration{
 			.id = id,
+			.parent = parent,
 			.controlPlanePrivateKey = privateKey.value(),
 			.meshPublicKey = wgPublicKey,
 			.meshPrivateKey = wgPrivateKey,

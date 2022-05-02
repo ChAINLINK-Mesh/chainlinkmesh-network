@@ -6,6 +6,7 @@
 
 #include <Poco/Net/SocketAddress.h>
 #include <Poco/Util/AbstractConfiguration.h>
+#include <exception>
 #include <limits>
 #include <thread>
 #include <variant>
@@ -75,6 +76,7 @@ void test_peerless() {
 
 void test_peers() {
 	auto config = get_config(rand(), get_test_ports());
+	config.parent = rand();
 	const auto peer = get_random_peer(config.id);
 
 	config.peers = { peer };
@@ -82,6 +84,13 @@ void test_peers() {
 	const auto propFile = server.get_configuration();
 
 	using Encoder = GenericCertificateManager<char>;
+
+	if (!propFile->has("parent")) {
+		throw "Expected 'parent' property to be set if server has a parent";
+	}
+	if (propFile->getUInt64("parent") != config.parent) {
+		throw "Expected 'parent' property to be set to the correct value";
+	}
 
 	Poco::Util::MapConfiguration::Keys keys;
 	propFile->keys("node", keys);
@@ -107,6 +116,7 @@ void test_peers() {
 
 void test_reload() {
 	auto initialConfig = get_config(rand(), get_test_ports());
+	initialConfig.parent = rand();
 
 	initialConfig.peers = { get_random_peer(initialConfig.id),
 		                      get_random_peer(initialConfig.id) };
@@ -116,7 +126,11 @@ void test_reload() {
 
 	const auto reloadServerConfig =
 	    Server::get_configuration_from_saved_config(initialProperties);
-	assert(std::holds_alternative<Server::Configuration>(reloadServerConfig));
+
+	if (!std::holds_alternative<Server::Configuration>(reloadServerConfig)) {
+		std::rethrow_exception(std::get<std::exception_ptr>(reloadServerConfig));
+	}
+
 	const auto reloadServer =
 	    get_server(std::get<Server::Configuration>(reloadServerConfig));
 	const auto reloadProperties = reloadServer.get_configuration();

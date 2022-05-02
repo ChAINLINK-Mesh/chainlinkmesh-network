@@ -158,6 +158,7 @@ SelfNode Server::get_self(const Server::Configuration& config) {
 		    .wireGuardHost = Host{ config.wireGuardAddress },
 		    .wireGuardPort = config.wireGuardAddress.port(),
 		    .controlPlaneCertificate = config.controlPlaneCertificate,
+		    .parent = config.parent,
 		},
 		config.controlPlanePrivateKey,
 		config.meshPrivateKey,
@@ -277,6 +278,12 @@ Expected<Server::Configuration> Server::get_configuration_from_saved_config(
 
 		const auto pskTTL = properties->getUInt64("psk-ttl");
 
+		std::optional<std::uint64_t> parent{};
+
+		if (properties->has("parent")) {
+			parent = properties->getUInt64("parent");
+		}
+
 		std::vector<Node> peers{};
 
 		Poco::Util::IniFileConfiguration::Keys keys{};
@@ -343,6 +350,7 @@ Expected<Server::Configuration> Server::get_configuration_from_saved_config(
 
 		Configuration config{
 			.id = id,
+			.parent = parent,
 			.controlPlanePrivateKey = controlPlanePrivateKey.value(),
 			.meshPublicKey = {},
 			.meshPrivateKey = {},
