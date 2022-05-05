@@ -67,7 +67,7 @@ FOREACH (subdir ${SUBDIRS})
     add_dependencies(${TEST_NAME}  "${TEST_NAME}_Makefile")
     ENDIF ()
     target_compile_options(${TEST_NAME} PRIVATE ${BASE_COMPILE_ARGS})
-    target_link_libraries(${TEST_NAME} "lib-${PROJECT_NAME}")
+    target_link_libraries(${TEST_NAME} PRIVATE "lib-${PROJECT_NAME}")
     add_test(NAME ${TEST_NAME}
         COMMAND ${TEST_NAME}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}

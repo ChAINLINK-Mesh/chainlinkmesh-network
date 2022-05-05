@@ -43,16 +43,23 @@ set(BASE_COMPILE_ARGS
     -Wno-unused-variable
     )
 
+# Add schemas build
 set(SCHEMA_DIRECTORY schemas)
 file(GLOB SCHEMAS "${SCHEMA_DIRECTORY}/*.fbs")
-flatbuffers_generate_headers(TARGET schemas SCHEMAS ${SCHEMAS} FLAGS --gen-object-api)
+set(FLATBUFFERS_FLATC_SCHEMA_EXTRA_ARGS "--gen-object-api")
+build_flatbuffers("${SCHEMAS}" "" schema_build "" "${CMAKE_INSTALL_PREFIX}/schemas" "" "")
+add_library(schema INTERFACE)
+get_target_property(SCHEMA_INCLUDE_DIR schema_build GENERATED_INCLUDES_DIR)
+target_include_directories(schema INTERFACE ${SCHEMA_INCLUDE_DIR})
+target_link_libraries(schema INTERFACE FlatBuffers)
+add_dependencies(schema schema_build)
 
 add_library(${PROJECT_NAME} STATIC "${SOURCE_FILES}" "${HEADER_FILES}")
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_INSTALL_PREFIX}/include ${SRC_DIRECTORY})
 target_compile_options(${PROJECT_NAME} PRIVATE ${BASE_COMPILE_ARGS})
 set_target_properties(${PROJECT_NAME} PROPERTIES PUBLIC_HEADER "${HEADER_FILES}")
 target_link_directories(${PROJECT_NAME} PUBLIC ${CMAKE_INSTALL_PREFIX}/lib)
-target_link_libraries(${PROJECT_NAME} PUBLIC Poco::Net pthread schemas)
+target_link_libraries(${PROJECT_NAME} PUBLIC schema Poco::Net pthread)
 
 if (DEFINED ${BUILD_SHARED_LIBS} AND NOT ${BUILD_SHARED_LIBS})
     target_link_libraries(${PROJECT_NAME} PUBLIC crypto.a)
@@ -114,7 +121,7 @@ FOREACH (subdir ${SUBDIRS})
         add_dependencies(${subdir} "${subdir}_Makefile")
     ENDIF ()
     target_compile_options(${subdir} PRIVATE ${BASE_COMPILE_ARGS})
-    target_link_libraries(${subdir} ${PROJECT_NAME})
+    target_link_libraries(${subdir} PRIVATE ${PROJECT_NAME})
     add_test(NAME ${subdir}
         COMMAND ${subdir}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}
