@@ -24,9 +24,9 @@ if (NOT ${BUILD_SHARED_LIBS})
 endif ()
 ExternalProject_Add(OpenSSL SOURCE_DIR ${OPENSSL_DIR}
     PATCH_COMMAND ""
-    CONFIGURE_COMMAND cd ${OPENSSL_DIR} && ./Configure --prefix=${CMAKE_INSTALL_PREFIX} --libdir=lib ${OPENSSL_ADDITIONAL_CONFIG_ARG}
-    BUILD_COMMAND ${MAKE_EXECUTABLE} -j${Ncpu} -C ${OPENSSL_DIR} ${_targ}
-    INSTALL_COMMAND ${MAKE_EXECUTABLE} -j${Ncpu} -C ${OPENSSL_DIR} install
+    CONFIGURE_COMMAND cd <SOURCE_DIR> && ./Configure --prefix=${CMAKE_INSTALL_PREFIX} --libdir=lib ${OPENSSL_ADDITIONAL_CONFIG_ARG}
+    BUILD_COMMAND ${MAKE_EXECUTABLE} -j${Ncpu} -C <SOURCE_DIR> ${_targ}
+    INSTALL_COMMAND ${MAKE_EXECUTABLE} -j${Ncpu} -C <SOURCE_DIR> install
     )
 
 # Add local Poco
@@ -56,7 +56,16 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/dependencies/poco ${CMAKE_INSTALL_P
 set(FLATBUFFERS_BUILD_TESTS OFF CACHE BOOL "")
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/dependencies/flatbuffers ${CMAKE_INSTALL_PREFIX}/flatbuffers)
 
-# Add local WireGuard kernel as a linkable library
+# Add local Protodata compiler
+set(PROTODATA_DIR ${CMAKE_CURRENT_SOURCE_DIR}/dependencies/protodata)
+ExternalProject_Add(Protodata SOURCE_DIR ${PROTODATA_DIR}
+    PATCH_COMMAND ""
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND ${MAKE_EXECUTABLE} -j${Ncpu} -C <SOURCE_DIR> ${_targ}
+    INSTALL_COMMAND install -m755 <SOURCE_DIR>/pd ${CMAKE_INSTALL_PREFIX}/pd
+    )
+
+# Add local WireGuard kernel interface as a linkable library
 set(LINUX_WG_DIR ${CMAKE_CURRENT_SOURCE_DIR}/dependencies/embeddable-wg-library/contrib/embeddable-wg-library)
 add_library(linux-wg-interface STATIC "${LINUX_WG_DIR}/wireguard.c")
 target_include_directories(linux-wg-interface PUBLIC "${LINUX_WG_DIR}")

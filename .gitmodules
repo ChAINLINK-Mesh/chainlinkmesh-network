@@ -11,3 +11,7 @@
 [submodule "dependencies/flatbuffers"]
 	path = dependencies/flatbuffers
 	url = https://github.com/google/flatbuffers.git
+[submodule "dependencies/protodata"]
+	path = dependencies/protodata
+	url = https://github.com/Crystalix007/protodata.git
+	branch = include-file-function

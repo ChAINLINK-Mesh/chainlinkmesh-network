@@ -27,16 +27,12 @@ jobs:
           version: 10
           platform: x64
 
-      - name: Setup ProtoData
+      - name: Setup Packages
         run: |
           sudo apt-get update
           sudo apt-get upgrade
-          sudo apt-get install -y git make wireguard openssl
+          sudo apt-get install -y git make wireguard
           sudo modprobe wireguard
-          git clone --branch include-file-function https://github.com/Crystalix007/protodata.git
-          cd protodata
-          make
-          sudo install -m755 pd /usr/bin/pd
 
       - name: Configure CMake
         # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
