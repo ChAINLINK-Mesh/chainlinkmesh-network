@@ -1,3 +1,6 @@
-/private-key.key
+/private-key.pem
 /x509-csr.pem
 /invalid-csr.data
+/x509-chain.1.pem
+/x509-chain.2.pem
+/x509-chain.pem

@@ -312,7 +312,7 @@ PublicProtocolManager::create_response(InitialisationPacket packet) {
 		.respondingWireGuardIPAddress = this->selfNode.wireGuardHost,
 		.respondingControlPlanePort = this->selfNode.controlPlanePort,
 		.respondingWireGuardPort = this->selfNode.wireGuardPort,
-		.signedCSR = signedCSR.value(),
+		.certificateChain = { signedCSR.value() },
 	};
 }
 
@@ -344,9 +344,12 @@ void PublicConnection::run() {
 		const auto responsePacket =
 		    parent.create_response(std::move(packet.value()));
 
+		assert(!responsePacket->certificateChain.empty());
+		const auto peerCertificate = responsePacket->certificateChain.back();
+		assert(peerCertificate != nullptr);
+
 		// TODO: Discover peer WG pubkey from certificate.
-		auto* const subjectName =
-		    X509_get_subject_name(responsePacket->signedCSR.get());
+		auto* const subjectName = X509_get_subject_name(peerCertificate.get());
 		const auto subjectUserIDB64 =
 		    CertificateManager::get_subject_attribute(subjectName, NID_userId);
 
@@ -365,7 +368,7 @@ void PublicConnection::run() {
 		}
 
 		const auto certificatePubkey =
-		    CertificateManager::get_certificate_pubkey(responsePacket->signedCSR);
+		    CertificateManager::get_certificate_pubkey(peerCertificate);
 
 		if (!certificatePubkey) {
 			std::cerr << "Failed to decode peer certificate's public key\n";
@@ -386,7 +389,7 @@ void PublicConnection::run() {
 		    .controlPlanePort = 0,
 		    .wireGuardHost = Host{ socket().peerAddress().host() },
 		    .wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,
-		    .controlPlaneCertificate = responsePacket->signedCSR,
+		    .controlPlaneCertificate = peerCertificate,
 		    .parent = packet->referringNode,
 		});
 
@@ -459,7 +462,7 @@ ByteString InitialisationRespPacket::get_bytes() const {
 	    this->respondingWireGuardPublicKey, this->respondingControlPlaneIPAddress,
 	    this->respondingWireGuardIPAddress, this->respondingControlPlanePort,
 	    this->respondingWireGuardPort,
-	    CertificateManager::encode_pem(this->signedCSR));
+	    CertificateManager::encode_pem(this->certificateChain));
 }
 
 std::optional<InitialisationRespPacket>
@@ -587,11 +590,12 @@ InitialisationRespPacket::decode_bytes(const ByteString& bytes) {
 	}
 
 	{
-		ByteStringView signedCSRBytes{ position, bytes.end() };
+		ByteStringView certificateChainBytes{ position, bytes.end() };
 
-		if (auto optSignedCSR =
-		        CertificateManager::decode_pem_certificate(signedCSRBytes)) {
-			packet.signedCSR = std::move(optSignedCSR.value());
+		if (auto optCertificateChain =
+		        CertificateManager::decode_pem_certificate_chain(
+		            certificateChainBytes)) {
+			packet.certificateChain = std::move(optCertificateChain.value());
 		} else {
 			return std::nullopt;
 		}

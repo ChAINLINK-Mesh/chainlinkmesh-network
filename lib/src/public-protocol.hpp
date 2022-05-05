@@ -67,7 +67,7 @@ namespace PublicProtocol {
 		Poco::Net::IPAddress respondingWireGuardIPAddress;
 		std::uint16_t respondingControlPlanePort;
 		std::uint16_t respondingWireGuardPort;
-		X509_RAII signedCSR;
+		std::vector<X509_RAII> certificateChain;
 
 		[[nodiscard]] ByteString get_bytes() const;
 		[[nodiscard]] static std::optional<InitialisationRespPacket>
@@ -78,8 +78,9 @@ namespace PublicProtocol {
 		    AbstractWireGuardManager::WG_KEY_SIZE + IPV6_ADDR_SIZE +
 		    IPV6_ADDR_SIZE + sizeof(respondingControlPlanePort) +
 		    sizeof(respondingWireGuardPort);
-		const constexpr static std::uint16_t MAX_PACKET_SIZE =
-		    MIN_PACKET_SIZE + MAX_CSR_SIZE;
+		// Packet is only limited by packet size, given that the responding
+		// certificate chain may have multiple entries.
+		const constexpr static std::uint16_t MAX_PACKET_SIZE = 65535;
 	};
 
 	class PublicConnection;

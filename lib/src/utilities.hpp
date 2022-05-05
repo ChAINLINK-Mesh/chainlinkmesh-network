@@ -66,11 +66,15 @@ ByteString get_bytestring(const ByteString& string);
 template <typename... Types>
 ByteString get_bytestring(const Types&... values) requires(sizeof...(Types) >
                                                            1) {
+	return (get_bytestring(values) + ...);
+}
+
+template <typename Type>
+ByteString get_bytestring(const std::vector<Type>& values) {
 	ByteString bytestring{};
 
-	for (const auto& value :
-	     std::vector<ByteString>{ get_bytestring(values)... }) {
-		bytestring += value;
+	for (const Type& value : values) {
+		bytestring += get_bytestring(value);
 	}
 
 	return bytestring;

@@ -174,7 +174,7 @@ GenericCertificateManager<Encoding>::decode_pem_certificate(
 	X509_RAII certificate{ PEM_read_bio_X509(bio.get(), nullptr, nullptr,
 		                                       nullptr) };
 
-	if (!certificate) {
+	if (certificate == nullptr) {
 		return std::nullopt;
 	}
 
@@ -203,7 +203,7 @@ GenericCertificateManager<Encoding>::decode_pem_csr(EncodingStringView pem) {
 	X509_REQ_RAII certificate{ PEM_read_bio_X509_REQ(bio.get(), nullptr, nullptr,
 		                                               nullptr) };
 
-	if (!certificate) {
+	if (certificate == nullptr) {
 		return std::nullopt;
 	}
 
@@ -218,10 +218,14 @@ GenericCertificateManager<Encoding>::decode_pem_private_key(
 
 	BIO_RAII pemBIO{ BIO_new_mem_buf(pem.data(), static_cast<int>(pem.size())) };
 
+	if (pemBIO == nullptr) {
+		return std::nullopt;
+	}
+
 	EVP_PKEY_RAII key{ PEM_read_bio_PrivateKey(pemBIO.get(), nullptr, nullptr,
 		                                         nullptr) };
 
-	if (!key) {
+	if (key == nullptr) {
 		return std::nullopt;
 	}
 
@@ -236,14 +240,47 @@ GenericCertificateManager<Encoding>::decode_pem_public_key(
 
 	BIO_RAII pemBIO{ BIO_new_mem_buf(pem.data(), static_cast<int>(pem.size())) };
 
+	if (pemBIO == nullptr) {
+		return std::nullopt;
+	}
+
 	EVP_PKEY_RAII key{ PEM_read_bio_PUBKEY(pemBIO.get(), nullptr, nullptr,
 		                                     nullptr) };
 
-	if (!key) {
+	if (key == nullptr) {
 		return std::nullopt;
 	}
 
 	return key;
+}
+
+template <std::integral Encoding>
+std::optional<std::vector<X509_RAII>>
+GenericCertificateManager<Encoding>::decode_pem_certificate_chain(
+    EncodingStringView pem) {
+	assert(pem.size() < std::numeric_limits<int>::max());
+
+	BIO_RAII pemBIO{ BIO_new_mem_buf(pem.data(), static_cast<int>(pem.size())) };
+
+	if (!pemBIO) {
+		return std::nullopt;
+	}
+
+	std::vector<X509_RAII> certificates{};
+	X509_RAII certificate{ PEM_read_bio_X509(pemBIO.get(), nullptr, nullptr,
+		                                       nullptr) };
+
+	while (certificate != nullptr) {
+		certificates.push_back(std::move(certificate));
+
+		certificate = PEM_read_bio_X509(pemBIO.get(), nullptr, nullptr, nullptr);
+	}
+
+	if (certificates.empty()) {
+		return std::nullopt;
+	}
+
+	return certificates;
 }
 
 template <std::integral Encoding>
@@ -334,6 +371,19 @@ GenericCertificateManager<Encoding>::encode_pem(const X509_REQ_RAII& x509Req) {
 	}
 
 	return EncodingString{ data, data + pemSize };
+}
+
+template <std::integral Encoding>
+typename GenericCertificateManager<Encoding>::EncodingString
+GenericCertificateManager<Encoding>::encode_pem(
+    const std::vector<X509_RAII>& certificateChain) {
+	EncodingString encoding{};
+
+	for (const auto& certificate : certificateChain) {
+		encoding += encode_pem(certificate);
+	}
+
+	return encoding;
 }
 
 template <std::integral Encoding>
@@ -491,6 +541,36 @@ bool operator==(const X509_REQ& a, const X509_REQ& b) {
 	}
 
 	if (PEM_write_bio_X509_REQ(bio2.get(), &b) == 0) {
+		// Unable to write PEM form, so mark as inequal.
+		return false;
+	}
+
+	char* data1 = nullptr;
+	const auto bio1Size = BIO_get_mem_data(bio1.get(), &data1);
+	char* data2 = nullptr;
+	const auto bio2Size = BIO_get_mem_data(bio2.get(), &data2);
+
+	if (bio1Size != bio2Size) {
+		return false;
+	}
+
+	return memcmp(data1, data2, bio1Size) == 0;
+}
+
+bool operator==(const X509& a, const X509& b) {
+	BIO_RAII bio1{ BIO_new(BIO_s_mem()) };
+	BIO_RAII bio2{ BIO_new(BIO_s_mem()) };
+
+	if (!bio1 || !bio2) {
+		return false;
+	}
+
+	if (PEM_write_bio_X509(bio1.get(), &a) == 0) {
+		// Unable to write PEM form, so mark as inequal.
+		return false;
+	}
+
+	if (PEM_write_bio_X509(bio2.get(), &b) == 0) {
 		// Unable to write PEM form, so mark as inequal.
 		return false;
 	}

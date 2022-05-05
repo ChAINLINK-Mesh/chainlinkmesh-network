@@ -93,6 +93,16 @@ public:
 	decode_pem_public_key(EncodingStringView pem);
 
 	/**
+	 * @brief Decodes a chain of PEM certificates.
+	 *
+	 * @param pem PEM encoded certificate chain
+	 * @return either the list of certificates, or std::nullopt if they could not
+	 *         be decoded
+	 */
+	static std::optional<std::vector<X509_RAII>>
+	decode_pem_certificate_chain(EncodingStringView pem);
+
+	/**
 	 * @brief Retrieves a list of values specified for a given subject attribute
 	 *        Numeric ID.
 	 *
@@ -119,6 +129,16 @@ public:
 	 * @return the PEM encoding of the given X509 CSR
 	 */
 	static EncodingString encode_pem(const X509_REQ_RAII& x509Req);
+
+	/**
+	 * @brief Encodes an X509 certificate chain to PEM format, in the order
+	 * provided.
+	 *
+	 * @param certificateChain The chain of X509 certificates to encode.
+	 * @return The PEM encoding of the given certificate chain.
+	 */
+	static EncodingString
+	encode_pem(const std::vector<X509_RAII>& certificateChain);
 
 	/**
 	 * @brief Encodes a private key to PEM format.
@@ -166,3 +186,4 @@ protected:
 using CertificateManager = GenericCertificateManager<>;
 
 bool operator==(const X509_REQ& a, const X509_REQ& b);
+bool operator==(const X509& a, const X509& b);

@@ -112,6 +112,17 @@ public:
 	 */
 	virtual std::optional<Node> delete_peer(std::uint64_t nodeID);
 
+	/**
+	 * @brief Gets the certificate chain of the given node.
+	 *
+	 * @param nodeID The node to fetch a certificate chain for.
+	 * @return A list of certificates, from the top-most CA, to the node's own
+	 *         certificate. If a node cannot be found, no std::nullopt will be
+	 *         returned instead.
+	 */
+	virtual std::optional<std::vector<X509_RAII>>
+	get_certificate_chain(std::uint64_t nodeID);
+
 protected:
 	mutable std::mutex nodesMutex;
 	std::map<std::uint64_t, Node> nodes;

@@ -1,6 +1,8 @@
 #include "peers.hpp"
 
 #include <Poco/Net/IPAddress.h>
+#include <functional>
+#include <stack>
 #include <variant>
 
 Peers::Peers(const Peers& other) {
@@ -87,6 +89,27 @@ std::optional<Node> Peers::delete_peer(const std::uint64_t nodeID) {
 	}
 
 	return std::nullopt;
+}
+
+std::optional<std::vector<X509_RAII>>
+Peers::get_certificate_chain(std::uint64_t nodeID) {
+	std::vector<X509_RAII> certificates{};
+
+	while (const auto& peer = get_peer(nodeID)) {
+		certificates.emplace_back(peer->controlPlaneCertificate);
+
+		if (!peer->parent) {
+			break;
+		}
+
+		nodeID = *peer->parent;
+	}
+
+	if (certificates.empty()) {
+		return std::nullopt;
+	}
+
+	return std::vector<X509_RAII>{ certificates.rbegin(), certificates.rend() };
 }
 
 bool Peers::validate_peer(const Node& peer) {

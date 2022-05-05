@@ -9,14 +9,20 @@ extern "C" {
 void generate_rsa_key();
 void generate_certificate();
 void generate_certificate_request();
+void equality_certificate();
+void equality_certificate_request();
 void decode_pem_csr();
+void decode_pem_certificate_chain();
 void reencode_pem_csr();
 
 void test() {
 	generate_rsa_key();
 	generate_certificate();
 	generate_certificate_request();
+	equality_certificate();
+	equality_certificate_request();
 	decode_pem_csr();
+	decode_pem_certificate_chain();
 	reencode_pem_csr();
 }
 
@@ -98,8 +104,75 @@ void generate_certificate_request() {
 	}
 }
 
+void equality_certificate() {
+	const auto key = CertificateManager::generate_rsa_key().value();
+	const auto certificate1 = CertificateManager::generate_certificate(
+	    {
+	        .country = "US",
+	        .province = "California",
+	        .city = "San Francisco",
+	        .organisation = "Mozilla",
+	        .commonName = "www.mozilla.org",
+	        .userID = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
+	        .validityDuration = 60ULL * 60ULL * 24ULL * 365ULL * 10ULL,
+	    },
+	    key);
+
+	if (*certificate1->get() != *certificate1->get()) {
+		throw "Equality check on the same value returned 'inequal'";
+	}
+
+	const auto certificate2 = CertificateManager::generate_certificate(
+	    CertificateInfo{
+	        .country = "UK",
+	        .province = "London",
+	        .city = "London",
+	        .organisation = "Test",
+	        .commonName = "test.co.uk",
+	        .userID = "XJMrXJMrXJMrXJMrXJMrXJMrXJMrXJMrXJMrXJMrXJU=",
+	        .validityDuration = 60ULL * 60ULL * 24ULL * 365ULL * 10ULL,
+	    },
+	    key);
+
+	if (*certificate1->get() == *certificate2->get()) {
+		throw "Equality check on a different value returned 'equal'";
+	}
+}
+
+void equality_certificate_request() {
+	const auto certificateRequest1 =
+	    CertificateManager::generate_certificate_request({
+	        .country = "US",
+	        .province = "California",
+	        .city = "San Francisco",
+	        .organisation = "Mozilla",
+	        .commonName = "www.mozilla.org",
+	        .userID = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
+	        .validityDuration = 60ULL * 60ULL * 24ULL * 365ULL * 10ULL,
+	    });
+
+	if (*certificateRequest1->get() != *certificateRequest1->get()) {
+		throw "Equality check on the same value returned 'inequal'";
+	}
+
+	const auto certificateRequest2 =
+	    CertificateManager::generate_certificate_request(CertificateInfo{
+	        .country = "UK",
+	        .province = "London",
+	        .city = "London",
+	        .organisation = "Test",
+	        .commonName = "test.co.uk",
+	        .userID = "XJMrXJMrXJMrXJMrXJMrXJMrXJMrXJMrXJMrXJMrXJU=",
+	        .validityDuration = 60ULL * 60ULL * 24ULL * 365ULL * 10ULL,
+	    });
+
+	if (*certificateRequest1->get() == *certificateRequest2->get()) {
+		throw "Equality check on a different value returned 'equal'";
+	}
+}
+
 void decode_pem_csr() {
-	const auto invalidCSRFile = read_file("private-key.key");
+	const auto invalidCSRFile = read_file("private-key.pem");
 
 	if (const auto invalidCSR =
 	        CertificateManager::decode_pem_csr(invalidCSRFile)) {
@@ -140,6 +213,33 @@ void decode_pem_csr() {
 
 	if (optPEMCSR.value() != optPEMCSR.value()) {
 		throw "Failure comparing valid CSR";
+	}
+}
+
+void decode_pem_certificate_chain() {
+	const auto originalEncoding = read_file("x509-chain.pem");
+	const auto decoded =
+	    CertificateManager::decode_pem_certificate_chain(originalEncoding);
+
+	if (!decoded) {
+		throw "Failure to decode certificate chain";
+	}
+
+	if (decoded->size() != 2) {
+		throw "Decoded certificate chain has wrong number of certificates";
+	}
+
+	const auto certificate1 =
+	    CertificateManager::decode_pem_certificate(read_file("x509-chain.1.pem"));
+	const auto certificate2 =
+	    CertificateManager::decode_pem_certificate(read_file("x509-chain.2.pem"));
+
+	if (*decoded->at(0) != *certificate1->get()) {
+		throw "First certificate in certificate chain is invalid";
+	}
+
+	if (*decoded->at(1) != *certificate2->get()) {
+		throw "Second certificate in certificate chain is invalid";
 	}
 }
 

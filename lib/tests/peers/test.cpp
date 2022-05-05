@@ -22,12 +22,14 @@ void create_peers();
 void get_peers();
 void add_peers();
 void delete_peers();
+void get_certificate_chain();
 
 void test() {
 	create_peers();
 	get_peers();
 	add_peers();
 	delete_peers();
+	get_certificate_chain();
 }
 
 void create_peers() {
@@ -101,6 +103,33 @@ void delete_peers() {
 		throw;
 	} catch (...) {
 		throw "Peers throws deleting unknown peer node";
+	}
+}
+
+void get_certificate_chain() {
+	const auto rootPeer = get_random_peer(std::nullopt);
+	const auto childPeer = get_random_peer(rootPeer.id);
+	const auto otherPeer = get_random_peer(rootPeer.id);
+	const auto grandchildPeer = get_random_peer(childPeer.id);
+
+	Peers peers{ std::vector{ rootPeer, childPeer, otherPeer, grandchildPeer } };
+
+	const auto certificateChain = peers.get_certificate_chain(childPeer.id);
+
+	if (!certificateChain) {
+		throw "Certificate chain missing for valid peer";
+	}
+
+	if (certificateChain->size() != 2) {
+		throw "Certificate chain has the wrong number of certificates";
+	}
+
+	if (*certificateChain->at(0) != *rootPeer.controlPlaneCertificate.get()) {
+		throw "Certificate chain's first certificate is not root CA certificate";
+	}
+
+	if (*certificateChain->at(1) != *childPeer.controlPlaneCertificate.get()) {
+		throw "Certificate chain's second certificate is not child certificate";
 	}
 }
 
