@@ -27,20 +27,18 @@ void create_private_protocol_manager() {
 }
 
 void decode_packet() {
-	PrivateProtocol::ErrorCommandT errorMessage{
-		.error = "Test error",
-	};
+	PrivateProtocol::ErrorCommandT errorMessage{};
+	errorMessage.error = "Test error";
 
 	PrivateProtocol::CommandUnion command{};
 	command.Set(errorMessage);
 
 	const auto randByte = []() { return static_cast<std::uint8_t>(rand()); };
 
-	PrivateProtocol::MessageT message{
-		.originator = static_cast<std::uint64_t>(rand()),
-		.command = command,
-		.signature = { randByte(), randByte(), randByte(), randByte() },
-	};
+	PrivateProtocol::MessageT message{};
+	message.originator = static_cast<std::uint64_t>(rand());
+	message.command = command;
+	message.signature = { randByte(), randByte(), randByte(), randByte() };
 
 	flatbuffers::FlatBufferBuilder fbb{};
 	fbb.Finish(PrivateProtocol::Message::Pack(fbb, &message));

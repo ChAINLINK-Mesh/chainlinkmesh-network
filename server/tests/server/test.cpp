@@ -79,6 +79,7 @@ Server::Configuration get_config(const std::uint64_t id,
 
 	return Server::Configuration{
 		.id = id,
+		.parent = std::nullopt,
 		.controlPlanePrivateKey = privateKey.value(),
 		.meshPublicKey = wgPublicKey,
 		.meshPrivateKey = {},
@@ -131,6 +132,7 @@ Server::Configuration get_child_config(const TestPorts& testPorts,
 
 	return Server::Configuration{
 		.id = response.allocatedNode,
+		.parent = std::nullopt,
 		.controlPlanePrivateKey = privateKey.value(),
 		.meshPublicKey = wgPublicKey,
 		.meshPrivateKey = {},

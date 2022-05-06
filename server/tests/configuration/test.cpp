@@ -238,6 +238,7 @@ Server::Configuration get_config(const std::uint64_t id,
 
 	return Server::Configuration{
 		.id = id,
+		.parent = std::nullopt,
 		.controlPlanePrivateKey = privateKey.value(),
 		.meshPublicKey = wgPublicKey,
 		.meshPrivateKey = {},

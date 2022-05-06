@@ -183,7 +183,6 @@ Node get_random_peer(std::optional<std::uint64_t> parentID) {
 	const auto privateKey = CertificateManager::generate_rsa_key();
 	assert(privateKey);
 
-	AbstractWireGuardManager::Key wgPrivateKey = generate_mock_wg_key();
 	AbstractWireGuardManager::Key wgPublicKey = generate_mock_wg_key();
 
 	const auto userID = base64_encode(wgPublicKey);

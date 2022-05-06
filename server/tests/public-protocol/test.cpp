@@ -74,6 +74,7 @@ Server::Configuration get_config(const TestPorts& testPorts) {
 
 	return Server::Configuration{
 		.id = 987654321,
+		.parent = std::nullopt,
 		.controlPlanePrivateKey = controlPlanePrivateKey.value(),
 		.meshPublicKey = wireGuardPublicKey,
 		.meshPrivateKey = {},
