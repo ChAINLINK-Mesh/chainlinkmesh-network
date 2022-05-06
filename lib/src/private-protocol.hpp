@@ -3,6 +3,11 @@
 #include "peers.hpp"
 #include "private-protocol_generated.h"
 
+#include <Poco/Net/StreamSocket.h>
+#include <Poco/Net/TCPServer.h>
+#include <Poco/Net/TCPServerConnection.h>
+#include <Poco/Net/TCPServerConnectionFactory.h>
+#include <Poco/Net/TCPServerParams.h>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -51,8 +56,36 @@ namespace PrivateProtocol {
 		static std::optional<MessageT>
 		decode_packet(const std::span<std::uint8_t>& bytes);
 
+		std::unique_ptr<Poco::Net::TCPServer>
+		start(const Poco::Net::ServerSocket& serverSocket,
+		      Poco::Net::TCPServerParams::Ptr params);
+
 	protected:
 		std::uint16_t controlPlanePort;
 		std::shared_ptr<Peers> peers;
+
+		class ConnectionFactory : public Poco::Net::TCPServerConnectionFactory {
+		public:
+			ConnectionFactory(PrivateProtocolManager& parent);
+			~ConnectionFactory() override = default;
+
+			Poco::Net::TCPServerConnection*
+			createConnection(const Poco::Net::StreamSocket& socket) override;
+
+		protected:
+			PrivateProtocolManager& parent;
+		};
+	};
+
+	class PrivateConnection : public Poco::Net::TCPServerConnection {
+	public:
+		PrivateConnection(const Poco::Net::StreamSocket& socket,
+		                  PrivateProtocolManager& parent);
+		~PrivateConnection() override = default;
+
+		void run() override;
+
+	protected:
+		PrivateProtocolManager& parent;
 	};
 } // namespace PrivateProtocol

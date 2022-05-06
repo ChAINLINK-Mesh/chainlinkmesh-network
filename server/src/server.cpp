@@ -8,6 +8,7 @@
 #include "wireguard.hpp"
 
 #include <Poco/Exception.h>
+#include <Poco/Net/ServerSocket.h>
 #include <Poco/Net/SocketAddress.h>
 #include <Poco/Net/TCPServer.h>
 #include <Poco/Util/IniFileConfiguration.h>
@@ -19,6 +20,7 @@
 #include <stdexcept>
 #include <utility>
 
+using PrivateProtocol::PrivateProtocolManager;
 using PublicProtocol::PublicProtocolManager;
 
 LinuxPeers::LinuxPeers(LinuxWireGuardManager& wireguardManager)
@@ -63,7 +65,8 @@ std::optional<Node> LinuxPeers::delete_peer(std::uint64_t nodeID) {
 
 // Assign default socket addresses if custom addresses are not specified.
 Server::Server(const Server::Configuration& config)
-    : randomEngine{ config.randomEngine.value_or(
+    : idRange{ Node::generate_id_range() },
+      randomEngine{ config.randomEngine.value_or(
 	        std::default_random_engine{ std::random_device{}() }) },
       self{ this->get_self(config) }, wgManager{ this->self, config.peers,
 	                                               config.meshPrivateKey,
@@ -81,18 +84,25 @@ Server::Server(const Server::Configuration& config)
 	        .peers = peers,
 	        .randomEngine = randomEngine,
 	    } },
-      idRange{ Node::generate_id_range() } {}
+      privateProtoManager{ PrivateProtocolManager::Configuration{
+	        .controlPlanePort = config.privateProtoPort.value_or(
+	            PrivateProtocol::DEFAULT_CONTROL_PLANE_PORT),
+	        .peers = peers,
+	    } } {}
 
 void Server::start() {
 	// Semantics unclear for repeated starts.
 	assert(!execution.has_value());
 
 	wgManager.setup_interface();
+
 	execution.emplace(ServerExecution{
 	    .publicProtoServer = this->publicProtoManager.start(
 	        Poco::Net::ServerSocket{ this->publicProtoAddress },
 	        Server::public_tcp_server_params()),
-	    .privateProtoServer = {},
+	    .privateProtoServer = this->privateProtoManager.start(
+	        Poco::Net::ServerSocket{ this->get_private_proto_address() },
+	        Server::private_tcp_server_params()),
 	});
 }
 
@@ -127,6 +137,14 @@ Poco::Net::SocketAddress Server::get_wireguard_address() const {
 }
 
 Poco::Net::TCPServerParams::Ptr Server::public_tcp_server_params() {
+	auto* params = new Poco::Net::TCPServerParams{};
+	params->setMaxThreads(1);
+	params->setMaxQueued(4);
+
+	return params;
+}
+
+Poco::Net::TCPServerParams::Ptr Server::private_tcp_server_params() {
 	auto* params = new Poco::Net::TCPServerParams{};
 	params->setMaxThreads(1);
 	params->setMaxQueued(4);

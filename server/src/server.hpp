@@ -2,6 +2,7 @@
 
 #include "linux-wireguard-manager.hpp"
 #include "node.hpp"
+#include "private-protocol.hpp"
 #include "public-protocol.hpp"
 #include "types.hpp"
 #include "wireguard.hpp"
@@ -180,6 +181,7 @@ protected:
 	std::uint16_t privateProtoPort;
 	Poco::Net::SocketAddress wireGuardAddress;
 	PublicProtocol::PublicProtocolManager publicProtoManager;
+	PrivateProtocol::PrivateProtocolManager privateProtoManager;
 
 	struct ServerExecution {
 		std::unique_ptr<Poco::Net::TCPServer> publicProtoServer;
@@ -192,9 +194,17 @@ protected:
 	 * @brief Dynamically allocates TCP server parameters for the public
 	 *        control-plane server.
 	 *
-	 * @return Poco::Net::TCPServerParams::Ptr TCP server parameters
+	 * @return TCP server parameters
 	 */
 	static Poco::Net::TCPServerParams::Ptr public_tcp_server_params();
+
+	/**
+	 * @brief Dynamically allocates TCP server parameters for the private
+	 *        control-plane server.
+	 *
+	 * @return TCP server parameters
+	 */
+	static Poco::Net::TCPServerParams::Ptr private_tcp_server_params();
 
 	SelfNode get_self(const Configuration& config);
 
