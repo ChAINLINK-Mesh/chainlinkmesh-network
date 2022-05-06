@@ -152,6 +152,12 @@ PublicProtocolManager get_testing_protocol_manager() {
 	AbstractWireGuardManager::Key wireguardPubkey{};
 	std::copy(wireguardPubkeyBytes->begin(), wireguardPubkeyBytes->end(),
 	          wireguardPubkey.begin());
+	const auto wireguardPrivkeyFile = trim(read_file("wireguard-privkey.key"));
+	const auto wireguardPrivkeyBytes = base64_decode(wireguardPrivkeyFile);
+	assert(wireguardPrivkeyBytes.has_value());
+	AbstractWireGuardManager::Key wireguardPrivkey{};
+	std::copy(wireguardPrivkeyBytes->begin(), wireguardPrivkeyBytes->end(),
+	          wireguardPrivkey.begin());
 	const auto certificateBytes = read_file("legitimate-ca.pem");
 	const auto certificate =
 	    CertificateManager::decode_pem_certificate(certificateBytes);
@@ -162,21 +168,25 @@ PublicProtocolManager get_testing_protocol_manager() {
 	assert(privateKey.has_value());
 
 	PublicProtocolManager protocolManager{ PublicProtocolManager::Configuration{
-		  .psk = "Testing Key"_uc,
 		  .self =
-		      Node{
-		          .id = 987654321ULL,
-		          .controlPlanePublicKey = privateKey.value(),
-		          .wireGuardPublicKey = wireguardPubkey,
-		          .controlPlaneIP = Poco::Net::IPAddress{ "10.0.0.1" },
-		          .controlPlanePort = PublicProtocol::DEFAULT_CONTROL_PLANE_PORT,
-		          .wireGuardHost = Host{ "127.0.0.1" },
-		          .wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,
-		          .controlPlaneCertificate = certificate.value(),
-		          .parent = std::nullopt,
+		      {
+		          Node{
+		              .id = 987654321ULL,
+		              .controlPlanePublicKey = privateKey.value(),
+		              .wireGuardPublicKey = wireguardPubkey,
+		              .controlPlaneIP = Poco::Net::IPAddress{ "10.0.0.1" },
+		              .controlPlanePort =
+		                  PublicProtocol::DEFAULT_CONTROL_PLANE_PORT,
+		              .wireGuardHost = Host{ "127.0.0.1" },
+		              .wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,
+		              .controlPlaneCertificate = certificate.value(),
+		              .parent = std::nullopt,
+		          },
+		          privateKey.value(),
+							wireguardPrivkey,
+		          ByteString{ "Testing Key"_uc },
+		          100,
 		      },
-		  .controlPlanePrivateKey = privateKey.value(),
-		  .pskTTL = 100,
 		  .clock = std::make_shared<TestClock>(std::chrono::seconds{
 		      123456789 }), // I.e. the same second the PSK was generated
 		  .peers = std::make_shared<Peers>(),

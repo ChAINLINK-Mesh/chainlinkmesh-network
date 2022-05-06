@@ -32,9 +32,7 @@ extern "C" {
 using namespace PublicProtocol;
 
 PublicProtocolManager::PublicProtocolManager(Configuration config)
-    : psk{ std::move(config.psk) }, selfNode{ std::move(config.self) },
-      controlPlanePrivateKey{ std::move(config.controlPlanePrivateKey) },
-      pskTTL{ config.pskTTL }, clock{ config.clock },
+    : selfNode{ std::move(config.self) }, clock{ config.clock },
       idDistribution{ Node::generate_id_range() },
       randomEngine{ config.randomEngine }, peers{ config.peers } {
 	// Ensure that the current node's host is specified as a valid address.
@@ -71,7 +69,7 @@ PublicProtocolManager::decode_packet(BufferType& buffer) const {
 		    std::chrono::time_point_cast<std::chrono::seconds>(this->clock->now())
 		        .time_since_epoch()
 		        .count();
-		const auto pskExpiryTime = packet.timestamp + this->pskTTL;
+		const auto pskExpiryTime = packet.timestamp + this->selfNode.pskTTL;
 
 		if (now > pskExpiryTime || now < packet.timestamp) {
 			std::cerr << "Initialisation request had an invalid timestamp ("
@@ -89,8 +87,9 @@ PublicProtocolManager::decode_packet(BufferType& buffer) const {
 		}
 
 		// Re-compute timestamp-PSK hash and compare
-		const auto timestampPSK = get_bytestring(packet.timestamp) +
-		                          ByteString{ this->psk.begin(), this->psk.end() };
+		const auto timestampPSK =
+		    get_bytestring(packet.timestamp) +
+		    ByteString{ this->selfNode.psk.begin(), this->selfNode.psk.end() };
 		std::array<std::int8_t, EVP_MAX_MD_SIZE> timestampPSKRehash{};
 		unsigned int rehashSize = 0;
 
@@ -144,8 +143,9 @@ PublicProtocolManager::decode_packet(BufferType& buffer) const {
 		}
 
 		// Compare timestamp-PSK signature
-		const auto timestampPSK = get_bytestring(packet.timestamp) +
-		                          ByteString{ this->psk.begin(), this->psk.end() };
+		const auto timestampPSK =
+		    get_bytestring(packet.timestamp) +
+		    ByteString{ this->selfNode.psk.begin(), this->selfNode.psk.end() };
 
 		const auto nodePKey = referringNode->controlPlanePublicKey;
 
@@ -213,7 +213,7 @@ PublicProtocolManager::decode_packet(ByteStringView buffer) {
 }
 
 ByteString PublicProtocolManager::get_psk() const {
-	return this->psk;
+	return this->selfNode.psk;
 }
 
 std::optional<std::tuple<std::uint64_t, SHA256_Hash, SHA256_Signature>>
@@ -223,7 +223,7 @@ PublicProtocolManager::get_signed_psk() const {
 	        .time_since_epoch()
 	        .count();
 	const auto timestampPSK =
-	    get_bytestring(timestamp) + get_bytestring(this->psk);
+	    get_bytestring(timestamp) + get_bytestring(this->selfNode.psk);
 
 	std::array<std::int8_t, EVP_MAX_MD_SIZE> timestampPSKBaseHash{};
 	unsigned int rehashSize = 0;
@@ -247,7 +247,7 @@ PublicProtocolManager::get_signed_psk() const {
 	}
 
 	if (EVP_DigestSignInit(digestCtx.get(), nullptr, EVP_sha256(), nullptr,
-	                       controlPlanePrivateKey.get()) != 1) {
+	                       this->selfNode.controlPlanePrivateKey.get()) != 1) {
 		return std::nullopt;
 	}
 
@@ -284,19 +284,16 @@ std::vector<Node> PublicProtocolManager::get_peer_nodes() const {
 const ByteString PublicProtocolManager::DEFAULT_PSK = "Testing Key"_uc;
 
 PublicProtocolManager::PublicProtocolManager(const PublicProtocolManager& other)
-    : psk{ other.psk }, selfNode{ other.selfNode },
-      controlPlanePrivateKey{ EVP_PKEY_dup(
-	        other.controlPlanePrivateKey.get()) },
-      clock{ other.clock }, peers{ other.peers } {
-	assert(peers);
-	assert(controlPlanePrivateKey);
+    : selfNode{ other.selfNode }, clock{ other.clock }, peers{ other.peers } {
+	assert(this->peers);
+	assert(this->selfNode.controlPlanePrivateKey);
 }
 
 std::optional<InitialisationRespPacket>
 PublicProtocolManager::create_response(InitialisationPacket packet) {
 	const auto signedCSR = CertificateManager::sign_csr(
 	    packet.csr, this->selfNode.controlPlaneCertificate,
-	    this->controlPlanePrivateKey,
+	    this->selfNode.controlPlanePrivateKey,
 	    PublicProtocolManager::DEFAULT_CERTIFICATE_VALIDITY_SECONDS);
 
 	if (!signedCSR) {

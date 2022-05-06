@@ -88,10 +88,7 @@ namespace PublicProtocol {
 	class PublicProtocolManager {
 	public:
 		struct Configuration {
-			ByteString psk;
-			Node self;
-			EVP_PKEY_RAII controlPlanePrivateKey;
-			std::uint64_t pskTTL;
+			SelfNode self;
 			Clock clock;
 			std::shared_ptr<Peers> peers;
 			std::default_random_engine randomEngine;
@@ -124,10 +121,7 @@ namespace PublicProtocol {
 		static const ByteString DEFAULT_PSK;
 
 	protected:
-		const ByteString psk;
-		const Node selfNode;
-		const EVP_PKEY_RAII controlPlanePrivateKey;
-		std::uint64_t pskTTL;
+		const SelfNode selfNode;
 		const Clock clock;
 		std::uniform_int_distribution<std::uint64_t> idDistribution;
 		std::default_random_engine randomEngine;

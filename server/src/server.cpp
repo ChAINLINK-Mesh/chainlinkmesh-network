@@ -76,11 +76,7 @@ Server::Server(const Server::Configuration& config)
       publicProtoManager{ PublicProtocolManager::Configuration{
 	        // TODO: replace with a cryptographically secure PSK-generation
 	        // function
-	        .psk = config.psk.value_or(PublicProtocolManager::DEFAULT_PSK),
 	        .self = self,
-	        .controlPlanePrivateKey = config.controlPlanePrivateKey,
-	        .pskTTL =
-	            config.pskTTL.value_or(PublicProtocolManager::DEFAULT_PSK_TTL),
 	        .clock = config.clock.value_or(std::make_shared<SystemClock>()),
 	        .peers = peers,
 	        .randomEngine = randomEngine,
