@@ -60,7 +60,7 @@ FOREACH (subdir ${SUBDIRS})
             "${TEST_NAME}_Makefile" SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}"
             PATCH_COMMAND ""
             CONFIGURE_COMMAND ""
-            BUILD_COMMAND ${MAKE_EXECUTABLE} -C "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}"
+            BUILD_COMMAND ${CMAKE_COMMAND} -E env PATH="${CMAKE_BINARY_DIR}:$ENV{PATH}" ${MAKE_EXECUTABLE} -C "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}"
             BUILD_ALWAYS true
             INSTALL_COMMAND ""
         )
