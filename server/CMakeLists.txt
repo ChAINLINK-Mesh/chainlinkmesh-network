@@ -5,12 +5,14 @@ project(wgmesh-server)
 set(SRC_DIRECTORY src)
 set(HEADER_FILES
     app.hpp
+    linux-netlink.hpp
     linux-wireguard-manager.hpp
     server.hpp
     validators.hpp
     )
 set(SOURCE_FILES
     app.cpp
+    linux-netlink.cpp
     linux-wireguard-manager.cpp
     server.cpp
     validators.cpp
@@ -29,9 +31,31 @@ set(BASE_COMPILE_ARGS
     -Wno-unused-variable
     )
 
+set(NL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../dependencies/libnl)
+ExternalProject_Add(LibNL SOURCE_DIR ${NL_DIR}
+    PATCH_COMMAND ""
+    CONFIGURE_COMMAND cd <SOURCE_DIR> && ./autogen.sh && ./configure --prefix ${CMAKE_INSTALL_PREFIX} --disable-cli
+    BUILD_COMMAND ${MAKE_EXECUTABLE} -j${Ncpu} -C <SOURCE_DIR> ${_targ}
+    INSTALL_COMMAND ${MAKE_EXECUTABLE} -j${Ncpu} -C <SOURCE_DIR> install
+    )
+
 add_library("lib-${PROJECT_NAME}" STATIC ${SOURCE_FILES} ${HEADER_FILES})
-target_include_directories("lib-${PROJECT_NAME}" PUBLIC ${SRC_DIRECTORY})
+target_include_directories("lib-${PROJECT_NAME}" PUBLIC ${SRC_DIRECTORY} "${CMAKE_INSTALL_PREFIX}/include/libnl3")
+target_compile_options("lib-${PROJECT_NAME}" PRIVATE ${BASE_COMPILE_ARGS})
 target_link_libraries("lib-${PROJECT_NAME}" PUBLIC lib-wgmesh linux-wg-interface Poco::Util)
+
+if (DEFINED ${BUILD_SHARED_LIBS} AND NOT ${BUILD_SHARED_LIBS})
+    target_link_libraries("lib-${PROJECT_NAME}" PUBLIC nl-3.a nl-route-3.a)
+    message(STATUS "Using static Netlink lib")
+else ()
+    target_link_libraries("lib-${PROJECT_NAME}" PUBLIC nl-3.so nl-route-3.so)
+    if (DEFINED ${BUILD_SHARED_LIBS})
+        set(DEF "ON")
+    else ()
+        set(DEF "OFF")
+    endif ()
+    message(STATUS "Using dynamic SSL lib")
+endif ()
 
 add_executable(${PROJECT_NAME} "src/main.cpp")
 target_link_libraries(${PROJECT_NAME} PUBLIC "lib-${PROJECT_NAME}")

@@ -1,5 +1,6 @@
 #include "linux-wireguard-manager.hpp"
 #include "error.hpp"
+#include "linux-netlink.hpp"
 #include "literals.hpp"
 #include "utilities.hpp"
 #include "wireguard.hpp"
@@ -123,66 +124,18 @@ void LinuxWireGuardManager::setup_interface() {
 			                        std::to_string(ret) };
 	}
 
-	// In order to set link device up, we need to first create a socket. Any
-	// socket will do.
-	const auto sockDeleter = [](const int* const s) { close(*s); };
-	auto tmpSocket = std::unique_ptr<int, FunctionDeleter<sockDeleter>>{ new int{
-		  socket(AF_INET, SOCK_DGRAM, 0) } };
+	// In order to set link device up, we need to interact with the kernel Netlink
+	// interface.
+	// TODO: Report actual errors.
+	if (!NetlinkManager::add_address(device->name, ownIP)) {
+		throw std::runtime_error{ "Failed to add IP address to WG interface" };
+	}
 
-	if (*tmpSocket < 0) {
+	if (!NetlinkManager::set_link_up(device->name)) {
 		throw std::runtime_error{
-			"Failed to create temporary socket for configuring WG interface: " +
-			std::to_string(-*tmpSocket)
+			"Failed to activate WG interface (set link status up)"
 		};
 	}
-
-	ifreq ifr{};
-	strncpy(ifr.ifr_name, device->name, IFNAMSIZ);
-
-	// Now get the interface index, as this is required for setting IPv6
-	// properties.
-	if (const auto res = ioctl(*tmpSocket, SIOCGIFINDEX, &ifr); res < 0) {
-		throw std::runtime_error{ "Failed to get index of WG interface: " +
-			                        std::to_string(-res) };
-	}
-
-	struct in6_ifreq ifr6 {
-		.ifr6_addr = *reinterpret_cast<const in6_addr*>(ownIP.addr()),
-		.ifr6_prefixlen = Node::CHAINLINK_NET_PREFIX_BITS,
-		.ifr6_ifindex = ifr.ifr_ifindex,
-	};
-
-	// TODO: May be unhappy that socket is IPv6
-	tmpSocket = std::unique_ptr<int, FunctionDeleter<sockDeleter>>{ new int{
-		  socket(AF_INET6, SOCK_DGRAM, 0) } };
-
-	if (const auto res = ioctl(*tmpSocket, SIOCSIFADDR, &ifr6); res < 0) {
-		throw std::runtime_error{ "Failed to set IP address on WG interface: " +
-			                        std::to_string(-res) };
-	}
-
-	// Revert back to IPv4 to allow setting the interface device to 'up' status.
-	tmpSocket = std::unique_ptr<int, FunctionDeleter<sockDeleter>>{ new int{
-		  socket(AF_INET, SOCK_DGRAM, 0) } };
-
-	if (*tmpSocket < 0) {
-		throw std::runtime_error{
-			"Failed to create temporary socket for configuring WG interface: " +
-			std::to_string(-*tmpSocket)
-		};
-	}
-
-	if (const auto res = ioctl(*tmpSocket, SIOCGIFFLAGS, &ifr); res < 0) {
-		throw std::runtime_error{ "Failed to get WG interface link flags: " +
-			                        std::to_string(-res) };
-	}
-
-	ifr.ifr_flags |= IFF_UP | IFF_RUNNING;
-
-	if (const auto res = ioctl(*tmpSocket, SIOCSIFFLAGS, &ifr); res < 0) {
-		throw std::runtime_error{ "Failed to set WG interface up: " +
-			                        std::to_string(-res) };
-	};
 
 	interfaceUp = true;
 }

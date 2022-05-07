@@ -15,3 +15,6 @@
 	path = dependencies/protodata
 	url = https://github.com/Crystalix007/protodata.git
 	branch = include-file-function
+[submodule "dependencies/libnl"]
+	path = dependencies/libnl
+	url = https://github.com/thom311/libnl.git

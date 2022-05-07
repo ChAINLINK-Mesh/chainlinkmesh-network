@@ -19,7 +19,7 @@ void PowerOfTwoValidator::validate(const Poco::Util::Option& /* unused */,
 	assert(value.size() < std::numeric_limits<int>::max());
 	char* end = nullptr;
 	const constexpr auto base = 10;
-	std::int64_t intVal = std::strtoll(value.c_str(), &end, base);
+	std::uint64_t intVal = std::strtoull(value.c_str(), &end, base);
 
 	if (end == value.c_str() || *end != '\0') {
 		throw Poco::Util::OptionException{ "value '" + value +
