@@ -76,18 +76,20 @@ Server::Server(const Server::Configuration& config)
 	        default_public_proto_address(config.wireGuardAddress)) },
       privateProtoPort{ self.controlPlanePort },
       wireGuardAddress{ config.wireGuardAddress },
+      privateProtoManager{ PrivateProtocolManager::Configuration{
+	        .controlPlanePort = config.privateProtoPort.value_or(
+	            PrivateProtocol::DEFAULT_CONTROL_PLANE_PORT),
+	        .selfNode = self,
+	        .peers = peers,
+	    } },
       publicProtoManager{ PublicProtocolManager::Configuration{
 	        // TODO: replace with a cryptographically secure PSK-generation
 	        // function
 	        .self = self,
 	        .clock = config.clock.value_or(std::make_shared<SystemClock>()),
 	        .peers = peers,
+	        .privateProtocolManager = privateProtoManager,
 	        .randomEngine = randomEngine,
-	    } },
-      privateProtoManager{ PrivateProtocolManager::Configuration{
-	        .controlPlanePort = config.privateProtoPort.value_or(
-	            PrivateProtocol::DEFAULT_CONTROL_PLANE_PORT),
-	        .peers = peers,
 	    } } {}
 
 void Server::start() {

@@ -4,6 +4,7 @@
 
 #include <Poco/Net/IPAddress.h>
 #include <Poco/Net/SocketAddress.h>
+#include <array>
 #include <optional>
 
 /**

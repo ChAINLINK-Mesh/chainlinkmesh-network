@@ -180,8 +180,8 @@ protected:
 	Poco::Net::SocketAddress publicProtoAddress;
 	std::uint16_t privateProtoPort;
 	Poco::Net::SocketAddress wireGuardAddress;
-	PublicProtocol::PublicProtocolManager publicProtoManager;
 	PrivateProtocol::PrivateProtocolManager privateProtoManager;
+	PublicProtocol::PublicProtocolManager publicProtoManager;
 
 	struct ServerExecution {
 		std::unique_ptr<Poco::Net::TCPServer> publicProtoServer;

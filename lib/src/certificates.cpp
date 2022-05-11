@@ -461,6 +461,44 @@ std::optional<X509_RAII> GenericCertificateManager<Encoding>::sign_csr(
 }
 
 template <std::integral Encoding>
+std::optional<std::vector<Encoding>>
+GenericCertificateManager<Encoding>::sign_data(
+    const EVP_PKEY_RAII& privateKey, const std::span<std::uint8_t>& data) {
+	assert(privateKey);
+	assert(!data.empty());
+
+	EVP_MD_CTX_RAII digestCtx{ EVP_MD_CTX_new() };
+
+	if (!digestCtx) {
+		return std::nullopt;
+	}
+
+	if (EVP_DigestSignInit(digestCtx.get(), nullptr, EVP_sha256(), nullptr,
+	                       privateKey.get()) != 1) {
+		return std::nullopt;
+	}
+
+	size_t sigLen = 0;
+
+	if (EVP_DigestSign(digestCtx.get(), nullptr, &sigLen, data.data(),
+	                   data.size()) != 1) {
+		return std::nullopt;
+	}
+
+	assert(sigLen == SHA256_SIGNATURE_SIZE);
+
+	std::vector<Encoding> signature(sigLen, 0);
+
+	if (EVP_DigestSign(digestCtx.get(),
+	                   reinterpret_cast<unsigned char*>(signature.data()),
+	                   &sigLen, data.data(), data.size()) != 1) {
+		return std::nullopt;
+	}
+
+	return signature;
+}
+
+template <std::integral Encoding>
 bool GenericCertificateManager<Encoding>::x509_set_name_from_certificate_info(
     X509_NAME* x509Name, const CertificateInfo& certificateInfo) {
 	assert(certificateInfo.country.size() < std::numeric_limits<int>::max());

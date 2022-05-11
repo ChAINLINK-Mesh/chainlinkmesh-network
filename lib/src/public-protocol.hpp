@@ -5,6 +5,7 @@
 #include "error.hpp"
 #include "node.hpp"
 #include "peers.hpp"
+#include "private-protocol.hpp"
 #include "utilities.hpp"
 #include "wireguard.hpp"
 
@@ -91,6 +92,7 @@ namespace PublicProtocol {
 			SelfNode self;
 			Clock clock;
 			std::shared_ptr<Peers> peers;
+			PrivateProtocol::PrivateProtocolManager& privateProtocolManager;
 			std::default_random_engine randomEngine;
 		};
 
@@ -126,6 +128,7 @@ namespace PublicProtocol {
 		std::uniform_int_distribution<std::uint64_t> idDistribution;
 		std::default_random_engine randomEngine;
 		std::shared_ptr<Peers> peers;
+		PrivateProtocol::PrivateProtocolManager& privateProtocolManager;
 
 		std::optional<InitialisationPacket> decode_packet(BufferType& buffer) const;
 

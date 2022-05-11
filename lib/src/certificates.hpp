@@ -1,5 +1,6 @@
 #pragma once
 
+#include "types.hpp"
 #include "utilities.hpp"
 
 #include <cinttypes>
@@ -162,6 +163,17 @@ public:
 	static std::optional<X509_RAII>
 	sign_csr(X509_REQ_RAII& req, const X509_RAII& caCert,
 	         const EVP_PKEY_RAII& key, std::uint64_t validityDurationSeconds);
+
+	/**
+	 * @brief Signs the given data with the private key.
+	 *
+	 * @param privateKey The private-key to sign this data with.
+	 * @param data The data to sign.
+	 * @return Either the signature, or std::nullopt if that failed.
+	 */
+	static std::optional<std::vector<Encoding>>
+	sign_data(const EVP_PKEY_RAII& privateKey,
+	          const std::span<std::uint8_t>& data);
 
 	// Enforce 2048-bit RSA keys
 	static const constexpr std::uint32_t KEY_LENGTH = 2048;

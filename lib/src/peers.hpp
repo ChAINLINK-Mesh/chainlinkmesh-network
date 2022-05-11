@@ -41,6 +41,8 @@ public:
 	/**
 	 * @brief Constructs a Peers list from the given nodes.
 	 *
+	 *        Peer IDs should not duplicated.
+	 *
 	 * @param nodes The nodes to initially add to the peers list.
 	 */
 	Peers(const std::vector<Node>& nodes);
@@ -105,6 +107,16 @@ public:
 	virtual std::vector<Node> get_peers() const;
 
 	/**
+	 * @brief Gets the neighbouring peers, i.e. children and the parent.
+	 *
+	 *        Will return an empty vector if the node is unknown.
+	 *
+	 * @param nodeID The ID of the node to fetch neighbouring peers for.
+	 * @return A vector of child and parent nodes.
+	 */
+	virtual std::vector<Node> get_neighbour_peers(std::uint64_t nodeID) const;
+
+	/**
 	 * @brief Deletes a node from the list of peers.
 	 *
 	 * @param nodeID The ID of the node to delete.
@@ -126,6 +138,7 @@ public:
 protected:
 	mutable std::mutex nodesMutex;
 	std::map<std::uint64_t, Node> nodes;
+	std::map<std::uint64_t, std::vector<std::uint64_t>> children;
 
 	static bool validate_peer(const Node& peer);
 };

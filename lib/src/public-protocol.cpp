@@ -34,7 +34,8 @@ using namespace PublicProtocol;
 PublicProtocolManager::PublicProtocolManager(Configuration config)
     : selfNode{ std::move(config.self) }, clock{ config.clock },
       idDistribution{ Node::generate_id_range() },
-      randomEngine{ config.randomEngine }, peers{ config.peers } {
+      randomEngine{ config.randomEngine }, peers{ config.peers },
+      privateProtocolManager{ config.privateProtocolManager } {
 	// Ensure that the current node's host is specified as a valid address.
 	assert(selfNode.wireGuardHost);
 	assert(peers);
@@ -284,7 +285,8 @@ std::vector<Node> PublicProtocolManager::get_peer_nodes() const {
 const ByteString PublicProtocolManager::DEFAULT_PSK = "Testing Key"_uc;
 
 PublicProtocolManager::PublicProtocolManager(const PublicProtocolManager& other)
-    : selfNode{ other.selfNode }, clock{ other.clock }, peers{ other.peers } {
+    : selfNode{ other.selfNode }, clock{ other.clock }, peers{ other.peers },
+      privateProtocolManager{ other.privateProtocolManager } {
 	assert(this->peers);
 	assert(this->selfNode.controlPlanePrivateKey);
 }
@@ -377,18 +379,23 @@ void PublicConnection::run() {
 		          peerWGPubkey.begin());
 
 		// TODO: Don't just rely on the default WireGuard port
-		parent.peers->add_peer(Node{
-		    .id = responsePacket->allocatedNode,
-		    .controlPlanePublicKey = certificatePubkey.value(),
-		    .wireGuardPublicKey = peerWGPubkey,
-		    .controlPlaneIP = AbstractWireGuardManager::get_internal_ip_address(
-		        responsePacket->allocatedNode),
-		    .controlPlanePort = 0,
-		    .wireGuardHost = Host{ socket().peerAddress().host() },
-		    .wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,
-		    .controlPlaneCertificate = peerCertificate,
-		    .parent = packet->referringNode,
-		});
+		const auto peer = Node{
+			.id = responsePacket->allocatedNode,
+			.controlPlanePublicKey = certificatePubkey.value(),
+			.wireGuardPublicKey = peerWGPubkey,
+			.controlPlaneIP = AbstractWireGuardManager::get_internal_ip_address(
+			    responsePacket->allocatedNode),
+			.controlPlanePort = 0,
+			.wireGuardHost = Host{ socket().peerAddress().host() },
+			.wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,
+			.controlPlaneCertificate = peerCertificate,
+			.parent = packet->referringNode,
+		};
+		// If this is a newly added peer.
+		if (parent.peers->add_peer(peer)) {
+			parent.privateProtocolManager.accept_peer_request(parent.selfNode.id,
+			                                                  peer);
+		}
 
 		if (responsePacket) {
 			const auto responsePacketBytes = responsePacket->get_bytes();

@@ -1,6 +1,8 @@
 #include "certificates.hpp"
 #include "clock.hpp"
 #include "literals.hpp"
+#include "peers.hpp"
+#include "private-protocol.hpp"
 #include "public-protocol.hpp"
 #include "wireguard.hpp"
 
@@ -16,7 +18,14 @@ extern "C" {
 }
 
 using namespace PublicProtocol;
-PublicProtocolManager get_testing_protocol_manager();
+SelfNode get_self_node();
+PrivateProtocol::PrivateProtocolManager
+get_private_protocol_manager(SelfNode selfNode);
+PublicProtocolManager get_public_protocol_manager(
+    SelfNode selfNode,
+    PrivateProtocol::PrivateProtocolManager& privateProtocolManager);
+std::tuple<PrivateProtocol::PrivateProtocolManager, PublicProtocolManager>
+get_testing_context();
 InitialisationPacket get_legitimate_packet();
 
 void test_equality();
@@ -72,8 +81,9 @@ void test_legitimate_packet() {
 	const InitialisationPacket truePacket = get_legitimate_packet();
 
 	const auto filePacket = read_file("legitimate-packet.data");
+	auto [privateProtocolManager, publicProtocolManager] = get_testing_context();
 
-	if (auto packet = get_testing_protocol_manager().decode_packet(filePacket);
+	if (auto packet = publicProtocolManager.decode_packet(filePacket);
 	    !packet || packet.value() != truePacket) {
 		throw "Failed to decode valid packet";
 	}
@@ -81,8 +91,9 @@ void test_legitimate_packet() {
 
 void test_invalid_psk_hash() {
 	const auto invalidPSKHashPacket = read_file("invalid-psk-packet.data");
+	auto [privateProtocolManager, publicProtocolManager] = get_testing_context();
 
-	if (get_testing_protocol_manager().decode_packet(invalidPSKHashPacket)) {
+	if (publicProtocolManager.decode_packet(invalidPSKHashPacket)) {
 		throw "Incorrectly decoded packet with invalid PSK";
 	}
 }
@@ -90,9 +101,9 @@ void test_invalid_psk_hash() {
 void test_unknown_referring_node() {
 	const auto unknownReferringNodePacket =
 	    read_file("unknown-referring-node.data");
+	auto [privateProtocolManager, publicProtocolManager] = get_testing_context();
 
-	if (get_testing_protocol_manager().decode_packet(
-	        unknownReferringNodePacket)) {
+	if (publicProtocolManager.decode_packet(unknownReferringNodePacket)) {
 		throw "Incorrectly decoded packet with invalid referring node";
 	}
 }
@@ -100,8 +111,9 @@ void test_unknown_referring_node() {
 void test_invalid_psk_signature() {
 	const auto invalidPSKSignaturePacket =
 	    read_file("invalid-psk-signature-packet.data");
+	auto [privateProtocolManager, publicProtocolManager] = get_testing_context();
 
-	if (get_testing_protocol_manager().decode_packet(invalidPSKSignaturePacket)) {
+	if (publicProtocolManager.decode_packet(invalidPSKSignaturePacket)) {
 		throw "Incorrectly decoded packet with invalid signature";
 	}
 }
@@ -145,7 +157,7 @@ InitialisationPacket get_legitimate_packet() {
 	};
 }
 
-PublicProtocolManager get_testing_protocol_manager() {
+SelfNode get_self_node() {
 	const auto wireguardPubkeyFile = trim(read_file("wireguard-pubkey.key"));
 	const auto wireguardPubkeyBytes = base64_decode(wireguardPubkeyFile);
 	assert(wireguardPubkeyBytes.has_value());
@@ -167,31 +179,54 @@ PublicProtocolManager get_testing_protocol_manager() {
 	auto privateKey = CertificateManager::decode_pem_private_key(privateKeyBytes);
 	assert(privateKey.has_value());
 
-	PublicProtocolManager protocolManager{ PublicProtocolManager::Configuration{
-		  .self =
-		      {
-		          Node{
-		              .id = 987654321ULL,
-		              .controlPlanePublicKey = privateKey.value(),
-		              .wireGuardPublicKey = wireguardPubkey,
-		              .controlPlaneIP = Poco::Net::IPAddress{ "10.0.0.1" },
-		              .controlPlanePort =
-		                  PublicProtocol::DEFAULT_CONTROL_PLANE_PORT,
-		              .wireGuardHost = Host{ "127.0.0.1" },
-		              .wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,
-		              .controlPlaneCertificate = certificate.value(),
-		              .parent = std::nullopt,
-		          },
-		          privateKey.value(),
-							wireguardPrivkey,
-		          ByteString{ "Testing Key"_uc },
-		          100,
-		      },
+	return SelfNode{
+		Node{
+		    .id = 987654321ULL,
+		    .controlPlanePublicKey = privateKey.value(),
+		    .wireGuardPublicKey = wireguardPubkey,
+		    .controlPlaneIP = Poco::Net::IPAddress{ "10.0.0.1" },
+		    .controlPlanePort = PrivateProtocol::DEFAULT_CONTROL_PLANE_PORT,
+		    .wireGuardHost = Host{ "127.0.0.1" },
+		    .wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,
+		    .controlPlaneCertificate = certificate.value(),
+		    .parent = std::nullopt,
+		},
+		privateKey.value(),
+		wireguardPrivkey,
+		ByteString{ "Testing Key"_uc },
+		100,
+	};
+}
+
+PrivateProtocol::PrivateProtocolManager
+get_private_protocol_manager(SelfNode selfNode) {
+	return PrivateProtocol::PrivateProtocolManager{
+		PrivateProtocol::PrivateProtocolManager::Configuration{
+		    .controlPlanePort = PrivateProtocol::DEFAULT_CONTROL_PLANE_PORT,
+		    .selfNode = selfNode,
+		    .peers = std::make_shared<Peers>(),
+		}
+	};
+}
+
+PublicProtocolManager get_public_protocol_manager(
+    SelfNode selfNode,
+    PrivateProtocol::PrivateProtocolManager& privateProtocolManager) {
+	return PublicProtocolManager{ PublicProtocolManager::Configuration{
+		  .self = selfNode,
 		  .clock = std::make_shared<TestClock>(std::chrono::seconds{
 		      123456789 }), // I.e. the same second the PSK was generated
 		  .peers = std::make_shared<Peers>(),
+		  .privateProtocolManager = privateProtocolManager,
 		  .randomEngine = std::default_random_engine{ std::random_device{}() },
 	} };
+}
 
-	return protocolManager;
+std::tuple<PrivateProtocol::PrivateProtocolManager, PublicProtocolManager>
+get_testing_context() {
+	const auto selfNode = get_self_node();
+	auto privateProtocolManager = get_private_protocol_manager(selfNode);
+	auto publicProtocolManager =
+	    get_public_protocol_manager(selfNode, privateProtocolManager);
+	return { privateProtocolManager, publicProtocolManager };
 }

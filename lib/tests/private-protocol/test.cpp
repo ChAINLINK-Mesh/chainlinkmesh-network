@@ -1,4 +1,5 @@
 #include "test.hpp"
+#include "literals.hpp"
 #include "private-protocol.hpp"
 #include "private-protocol_generated.h"
 
@@ -8,6 +9,7 @@
 const constexpr std::uint16_t MIN_UNPRIVILEGED_PORT = 2048 + 1;
 
 std::uint16_t get_safe_port();
+SelfNode get_self_node();
 
 void create_private_protocol_manager();
 void decode_packet();
@@ -21,6 +23,7 @@ void create_private_protocol_manager() {
 	[[maybe_unused]] PrivateProtocol::PrivateProtocolManager manager{
 		PrivateProtocol::PrivateProtocolManager::Configuration{
 		    .controlPlanePort = get_safe_port(),
+		    .selfNode = get_self_node(),
 		    .peers = std::make_shared<Peers>(),
 		},
 	};
@@ -72,4 +75,24 @@ std::uint16_t get_safe_port() {
 	    MIN_UNPRIVILEGED_PORT;
 
 	return basePort++;
+}
+
+SelfNode get_self_node() {
+	return SelfNode{
+		Node{
+		    .id = 987654321ULL,
+		    .controlPlanePublicKey = {},
+		    .wireGuardPublicKey = {},
+		    .controlPlaneIP = Poco::Net::IPAddress{ "10.0.0.1" },
+		    .controlPlanePort = PrivateProtocol::DEFAULT_CONTROL_PLANE_PORT,
+		    .wireGuardHost = Host{ "127.0.0.1" },
+		    .wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,
+		    .controlPlaneCertificate = {},
+		    .parent = std::nullopt,
+		},
+		{},
+		{},
+		ByteString{ "Testing Key"_uc },
+		100,
+	};
 }

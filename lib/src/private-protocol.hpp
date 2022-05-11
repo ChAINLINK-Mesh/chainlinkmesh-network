@@ -24,6 +24,11 @@ namespace PrivateProtocol {
 			std::uint16_t controlPlanePort;
 
 			/**
+			 * @selfNode The node operating this private protocol.
+			 */
+			SelfNode selfNode;
+
+			/**
 			 * @peers A shared pointer to the list of peers. Not permitted to be
 			 * nullptr.
 			 */
@@ -36,7 +41,7 @@ namespace PrivateProtocol {
 		 *
 		 * @param config The initial configuration to start with.
 		 */
-		PrivateProtocolManager(const Configuration& config);
+		PrivateProtocolManager(Configuration config);
 
 		/**
 		 * @brief Creates a copy of a Private-Protocol Manager. Will create a
@@ -60,9 +65,34 @@ namespace PrivateProtocol {
 		start(const Poco::Net::ServerSocket& serverSocket,
 		      Poco::Net::TCPServerParams::Ptr params);
 
+		/**
+		 * @brief Accepts a peer request. Will notify other peers via the
+		 *        private protocol.
+		 *
+		 *        Will not updated existing nodes.
+		 *
+		 *        Expects peer node to be valid.
+		 *
+		 * @param originator Which node sent this message. If we signed a CSR, then
+		 *                   the originator is our own ID.
+		 * @param node The node to add to our peer list.
+		 * @return Whether the peer was actually added.
+		 */
+		virtual bool accept_peer_request(std::uint64_t originator,
+		                                 const Node& node);
+
 	protected:
 		std::uint16_t controlPlanePort;
 		std::shared_ptr<Peers> peers;
+		SelfNode selfNode;
+
+		/**
+		 * @brief Informs an existing peer node about a new peer.
+		 *
+		 * @param nodeID The existing peer's ID.
+		 * @param peer The new peer's details.
+		 */
+		void inform_node_about_new_peer(std::uint64_t nodeID, const Node& peer);
 
 		class ConnectionFactory : public Poco::Net::TCPServerConnectionFactory {
 		public:
