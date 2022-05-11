@@ -1,5 +1,6 @@
 #include "test.hpp"
 #include "certificates.hpp"
+#include "node.hpp"
 #include "peers.hpp"
 #include "public-protocol.hpp"
 #include "wireguard.hpp"
@@ -198,7 +199,7 @@ Node get_random_peer(std::optional<std::uint64_t> parentID) {
 		.id = id,
 		.controlPlanePublicKey = peerControlPlanePubkey,
 		.wireGuardPublicKey = wgPublicKey,
-		.controlPlaneIP = AbstractWireGuardManager::get_internal_ip_address(id),
+		.controlPlaneIP = Node::get_control_plane_ip(id),
 		.controlPlanePort = testPorts.privateProtoAddress.port(),
 		.wireGuardHost = Host{ testPorts.wireGuardAddress },
 		.wireGuardPort = testPorts.wireGuardAddress.port(),

@@ -4,10 +4,11 @@ namespace PrivateProtocol;
 
 table PeerInformCommand {
 	peer_id:uint64;
-	// Certificate in PEM format
+	// Certificate chain (from root) in PEM format
 	certificate:string;
 	wireguard_address:string;
 	private_proto_port:uint16;
+	parent:uint64 = null;
 }
 
 table ErrorCommand {

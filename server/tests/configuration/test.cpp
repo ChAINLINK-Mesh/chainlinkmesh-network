@@ -296,8 +296,7 @@ Node get_random_peer(std::optional<std::uint64_t> parentID) {
 		.id = peerConfig.id.value(),
 		.controlPlanePublicKey = peerControlPlanePubkey,
 		.wireGuardPublicKey = peerConfig.meshPublicKey,
-		.controlPlaneIP = AbstractWireGuardManager::get_internal_ip_address(
-		    peerConfig.id.value()),
+		.controlPlaneIP = Node::get_control_plane_ip(peerConfig.id.value()),
 		.controlPlanePort = peerConfig.privateProtoPort.value(),
 		.wireGuardHost = Host{ peerConfig.wireGuardAddress.host() },
 		.wireGuardPort = peerConfig.privateProtoPort.value(),

@@ -15,6 +15,8 @@
 namespace PrivateProtocol {
 	const constexpr std::uint16_t DEFAULT_CONTROL_PLANE_PORT = 273;
 
+	class PrivateConnection;
+
 	class PrivateProtocolManager {
 	public:
 		struct Configuration {
@@ -59,7 +61,7 @@ namespace PrivateProtocol {
 		 * @param bytes Sequence of bytes to decode.
 		 */
 		static std::optional<MessageT>
-		decode_packet(const std::span<std::uint8_t>& bytes);
+		decode_packet(const std::span<const std::uint8_t>& bytes);
 
 		std::unique_ptr<Poco::Net::TCPServer>
 		start(const Poco::Net::ServerSocket& serverSocket,
@@ -105,6 +107,8 @@ namespace PrivateProtocol {
 		protected:
 			PrivateProtocolManager& parent;
 		};
+
+		friend PrivateConnection;
 	};
 
 	class PrivateConnection : public Poco::Net::TCPServerConnection {
@@ -117,5 +121,10 @@ namespace PrivateProtocol {
 
 	protected:
 		PrivateProtocolManager& parent;
+
+		void send_error(const std::string& errorMsg);
+
+		// Specific handling functions.
+		void handle_peer_inform(const PrivateProtocol::MessageT& message);
 	};
 } // namespace PrivateProtocol

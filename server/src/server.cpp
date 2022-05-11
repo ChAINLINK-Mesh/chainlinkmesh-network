@@ -159,8 +159,7 @@ SelfNode Server::get_self(const Server::Configuration& config) {
 
 	// The host for the private protocol is deterministically mapped according to
 	// the node ID, so enforce this relationship.
-	const auto privateProtoHost =
-	    AbstractWireGuardManager::get_internal_ip_address(id);
+	const auto privateProtoHost = Node::get_control_plane_ip(id);
 	const auto privateProtoPort = config.privateProtoPort.value_or(
 	    PrivateProtocol::DEFAULT_CONTROL_PLANE_PORT);
 
@@ -466,8 +465,7 @@ bool Server::add_node(const Node& node) {
 	    // server.
 	    .endpoint = std::nullopt,
 	    // Poco::Net::SocketAddress{ node.wireGuardIP, node.wireGuardPort },
-	    .internalAddress =
-	        AbstractWireGuardManager::get_internal_ip_address(node.id),
+	    .internalAddress = Node::get_control_plane_ip(node.id),
 	});
 
 	return true;

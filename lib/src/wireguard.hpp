@@ -80,8 +80,6 @@ public:
 	 */
 	virtual void teardown_interface() = 0;
 
-	Poco::Net::IPAddress static get_internal_ip_address(std::uint64_t nodeID);
-
 	const constexpr static std::uint16_t KEEPALIVE_INTERVAL = 25;
 };
 

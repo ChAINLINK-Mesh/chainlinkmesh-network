@@ -383,8 +383,8 @@ void PublicConnection::run() {
 			.id = responsePacket->allocatedNode,
 			.controlPlanePublicKey = certificatePubkey.value(),
 			.wireGuardPublicKey = peerWGPubkey,
-			.controlPlaneIP = AbstractWireGuardManager::get_internal_ip_address(
-			    responsePacket->allocatedNode),
+			.controlPlaneIP =
+			    Node::get_control_plane_ip(responsePacket->allocatedNode),
 			.controlPlanePort = 0,
 			.wireGuardHost = Host{ socket().peerAddress().host() },
 			.wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,

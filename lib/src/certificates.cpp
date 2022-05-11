@@ -463,7 +463,8 @@ std::optional<X509_RAII> GenericCertificateManager<Encoding>::sign_csr(
 template <std::integral Encoding>
 std::optional<std::vector<Encoding>>
 GenericCertificateManager<Encoding>::sign_data(
-    const EVP_PKEY_RAII& privateKey, const std::span<std::uint8_t>& data) {
+    const EVP_PKEY_RAII& privateKey,
+    const std::span<const std::uint8_t>& data) {
 	assert(privateKey);
 	assert(!data.empty());
 
@@ -496,6 +497,30 @@ GenericCertificateManager<Encoding>::sign_data(
 	}
 
 	return signature;
+}
+
+template <std::integral Encoding>
+std::optional<bool> GenericCertificateManager<Encoding>::check_signature(
+    const EVP_PKEY_RAII& publicKey, const std::span<const std::uint8_t>& data,
+    const std::span<const std::uint8_t>& signature) {
+	EVP_PKEY_CTX_RAII pkeyCtx{ EVP_PKEY_CTX_new(publicKey.get(), nullptr) };
+
+	if (pkeyCtx == nullptr) {
+		return std::nullopt;
+	}
+
+	if (EVP_PKEY_verify_init(pkeyCtx.get()) != 1) {
+		return std::nullopt;
+	}
+
+	const auto verifyResult = EVP_PKEY_verify(pkeyCtx.get(), signature.data(), signature.size(), data.data(), data.size());
+
+	// A result of less than 0 indicates an error occurred.
+	if (verifyResult < 0) {
+		return std::nullopt;
+	}
+
+	return verifyResult == 1;
 }
 
 template <std::integral Encoding>

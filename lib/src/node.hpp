@@ -17,13 +17,22 @@ struct Node {
 	X509_RAII controlPlaneCertificate;
 	std::optional<std::uint64_t> parent;
 
-	const static std::uint16_t DEFAULT_WIREGUARD_PORT = 274;
+	const constexpr static std::uint16_t DEFAULT_WIREGUARD_PORT = 274;
 	const static std::array<std::uint8_t, 8> CHAINLINK_NET_PREFIX;
 	const constexpr static std::uint8_t CHAINLINK_NET_PREFIX_BITS =
 	    CHAINLINK_NET_PREFIX.size() * 8;
 
 	using IDRangeGenerator = std::uniform_int_distribution<std::uint64_t>;
 	static IDRangeGenerator generate_id_range();
+
+	/**
+	 * @brief Converts an ID into a corresponding control-plane IP address using a
+	 *        1-1 mapping.
+	 *
+	 * @param nodeID The ID of the node to get an IP for.
+	 * @return The control-plane address of the node being looked up.
+	 */
+	static Poco::Net::IPAddress get_control_plane_ip(std::uint64_t nodeID);
 };
 
 struct SelfNode : public Node {
