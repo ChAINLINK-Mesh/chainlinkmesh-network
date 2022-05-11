@@ -12,6 +12,7 @@
 #include <random>
 #include <string>
 #include <test.hpp>
+#include <utility>
 
 extern "C" {
 #include <openssl/pem.h>
@@ -125,11 +126,11 @@ void test_legitimate_response_packet() {
 	if (const auto legitimateResponsePacket =
 	        InitialisationRespPacket::decode_bytes(
 	            legitimateResponsePacketBytes)) {
-		if (legitimateResponsePacket->respondingNode != 987654321ull) {
+		if (legitimateResponsePacket->respondingNode != 987654321ULL) {
 			throw "Failed to decode legitimate response packet's responding node";
 		}
 
-		if (legitimateResponsePacket->allocatedNode != 1223334444ull) {
+		if (legitimateResponsePacket->allocatedNode != 1223334444ULL) {
 			throw "Failed to decode legitimate reponse packet's allocated node";
 		}
 
@@ -203,7 +204,7 @@ get_private_protocol_manager(SelfNode selfNode) {
 	return PrivateProtocol::PrivateProtocolManager{
 		PrivateProtocol::PrivateProtocolManager::Configuration{
 		    .controlPlanePort = PrivateProtocol::DEFAULT_CONTROL_PLANE_PORT,
-		    .selfNode = selfNode,
+		    .selfNode = std::move(selfNode),
 		    .peers = std::make_shared<Peers>(),
 		}
 	};
@@ -213,7 +214,7 @@ PublicProtocolManager get_public_protocol_manager(
     SelfNode selfNode,
     PrivateProtocol::PrivateProtocolManager& privateProtocolManager) {
 	return PublicProtocolManager{ PublicProtocolManager::Configuration{
-		  .self = selfNode,
+		  .self = std::move(selfNode),
 		  .clock = std::make_shared<TestClock>(std::chrono::seconds{
 		      123456789 }), // I.e. the same second the PSK was generated
 		  .peers = std::make_shared<Peers>(),

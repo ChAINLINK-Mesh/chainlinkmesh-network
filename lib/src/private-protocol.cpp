@@ -55,7 +55,7 @@ namespace PrivateProtocol {
 
 		if (addedPeer) {
 			for (const auto& neighbour : peers->get_neighbour_peers(selfNode.id)) {
-				if (neighbour.id == originator) {
+				if (neighbour.id == originator || neighbour.id == node.id) {
 					continue;
 				}
 
