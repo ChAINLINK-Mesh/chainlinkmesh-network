@@ -2,6 +2,8 @@
 #include "certificates.hpp"
 #include "literals.hpp"
 
+#include <limits>
+
 extern "C" {
 #include <openssl/evp.h>
 }
@@ -14,6 +16,7 @@ void equality_certificate_request();
 void decode_pem_csr();
 void decode_pem_certificate_chain();
 void reencode_pem_csr();
+void sign_data();
 
 void test() {
 	generate_rsa_key();
@@ -24,6 +27,7 @@ void test() {
 	decode_pem_csr();
 	decode_pem_certificate_chain();
 	reencode_pem_csr();
+	sign_data();
 }
 
 void generate_rsa_key() {
@@ -251,5 +255,48 @@ void reencode_pem_csr() {
 
 	if (originalEncoding != reencoded) {
 		throw "Failed to reencode CSR to PEM correctly";
+	}
+}
+
+void sign_data() {
+	const constexpr size_t randDataSize = 1024;
+	std::array<std::uint8_t, randDataSize> randData{};
+
+	for (unsigned char& i : randData) {
+		i = rand() % std::numeric_limits<std::uint8_t>::max();
+	}
+
+	const auto key = CertificateManager::generate_rsa_key();
+	assert(key.has_value());
+	const auto signature = CertificateManager::sign_data(key.value(), randData);
+
+	if (!signature.has_value()) {
+		throw "Failed to sign data";
+	}
+
+	const auto signatureMatches = CertificateManager::check_signature(
+	    key.value(), randData, signature.value());
+
+	if (!signatureMatches.has_value()) {
+		throw "Failed to check if signature is associated to its signing key";
+	}
+
+	if (!signatureMatches.value()) {
+		throw "Expected signature to match the key which signed it";
+	}
+
+	const auto otherKey = CertificateManager::generate_rsa_key();
+	assert(otherKey.has_value());
+
+	const auto otherSignatureMatches = CertificateManager::check_signature(
+	    otherKey.value(), randData, signature.value());
+
+	if (!otherSignatureMatches.has_value()) {
+		throw "Failed to check if signature is associated to a different key";
+	}
+
+	if (otherSignatureMatches.value()) {
+		throw "Expected signature not to match a different key from the one which "
+		      "signed it";
 	}
 }

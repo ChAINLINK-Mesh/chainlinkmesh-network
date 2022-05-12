@@ -41,17 +41,13 @@ public:
 	[[nodiscard]] static std::optional<X509_REQ_RAII>
 	generate_certificate_request(const CertificateInfo& certificateInfo);
 
-	static std::shared_ptr<GenericCertificateManager>
-	create_instance(const std::filesystem::path& certificatesFolder);
-	static std::shared_ptr<GenericCertificateManager> get_instance();
-
 	/**
 	 * @brief Gets a certificate's public key.
 	 *
 	 * @param certificate which certificate to retrieve the public key for.
 	 * @return the public key of the given certificate
 	 */
-	static std::optional<EVP_PKEY_RAII>
+	[[nodiscard]] static std::optional<EVP_PKEY_RAII>
 	get_certificate_pubkey(const X509_RAII& certificate);
 
 	/**
@@ -61,7 +57,7 @@ public:
 	 * @return either the certificate, or std::nullopt if it could not be decoded
 	 *         (never nullptr)
 	 */
-	static std::optional<X509_RAII>
+	[[nodiscard]] static std::optional<X509_RAII>
 	decode_pem_certificate(EncodingStringView pem);
 
 	/**
@@ -71,7 +67,8 @@ public:
 	 * @return either the CSR, or std::nullopt if it could not be decoded
 	 *         (never nullptr)
 	 */
-	static std::optional<X509_REQ_RAII> decode_pem_csr(EncodingStringView pem);
+	[[nodiscard]] static std::optional<X509_REQ_RAII>
+	decode_pem_csr(EncodingStringView pem);
 
 	/**
 	 * @brief Decodes the given PEM bytes into a private key.
@@ -80,7 +77,7 @@ public:
 	 * @return either the private key, or std::nullopt if the private key could
 	 *         not be decoded
 	 */
-	static std::optional<EVP_PKEY_RAII>
+	[[nodiscard]] static std::optional<EVP_PKEY_RAII>
 	decode_pem_private_key(EncodingStringView pem);
 
 	/**
@@ -90,7 +87,7 @@ public:
 	 * @return either the public key, or std::nullopt if the public key could not
 	 *         be decoded
 	 */
-	static std::optional<EVP_PKEY_RAII>
+	[[nodiscard]] static std::optional<EVP_PKEY_RAII>
 	decode_pem_public_key(EncodingStringView pem);
 
 	/**
@@ -100,7 +97,7 @@ public:
 	 * @return either the list of certificates, or std::nullopt if they could not
 	 *         be decoded
 	 */
-	static std::optional<std::vector<X509_RAII>>
+	[[nodiscard]] static std::optional<std::vector<X509_RAII>>
 	decode_pem_certificate_chain(EncodingStringView pem);
 
 	/**
@@ -112,7 +109,7 @@ public:
 	 * @param nid the subject attribute Numeric ID
 	 * @return a list of all values specified for this attribute
 	 */
-	static std::vector<std::string>
+	[[nodiscard]] static std::vector<std::string>
 	get_subject_attribute(const X509_NAME* subject, int nid);
 
 	/**
@@ -121,7 +118,7 @@ public:
 	 * @param x509 the X509 certificate to encode
 	 * @return the PEM encoding of the given X509 certificate
 	 */
-	static EncodingString encode_pem(const X509_RAII& x509);
+	[[nodiscard]] static EncodingString encode_pem(const X509_RAII& x509);
 
 	/**
 	 * @brief Encodes an X509 CSR to PEM format.
@@ -129,7 +126,7 @@ public:
 	 * @param x509 the X509 CSR to encode.
 	 * @return the PEM encoding of the given X509 CSR
 	 */
-	static EncodingString encode_pem(const X509_REQ_RAII& x509Req);
+	[[nodiscard]] static EncodingString encode_pem(const X509_REQ_RAII& x509Req);
 
 	/**
 	 * @brief Encodes an X509 certificate chain to PEM format, in the order
@@ -138,7 +135,7 @@ public:
 	 * @param certificateChain The chain of X509 certificates to encode.
 	 * @return The PEM encoding of the given certificate chain.
 	 */
-	static EncodingString
+	[[nodiscard]] static EncodingString
 	encode_pem(const std::vector<X509_RAII>& certificateChain);
 
 	/**
@@ -147,7 +144,7 @@ public:
 	 * @param pkey the private key to encode
 	 * @return the PEM encoding of the given private key
 	 */
-	static EncodingString encode_pem(const EVP_PKEY_RAII& pkey);
+	[[nodiscard]] static EncodingString encode_pem(const EVP_PKEY_RAII& pkey);
 
 	/**
 	 * @brief Signs a CSR with the given certificate and keys.
@@ -160,7 +157,7 @@ public:
 	 * @return either the signed certificate, or std::nullopt if the certificate
 	 *         could not be signed
 	 */
-	static std::optional<X509_RAII>
+	[[nodiscard]] static std::optional<X509_RAII>
 	sign_csr(X509_REQ_RAII& req, const X509_RAII& caCert,
 	         const EVP_PKEY_RAII& key, std::uint64_t validityDurationSeconds);
 
@@ -171,7 +168,7 @@ public:
 	 * @param data The data to sign.
 	 * @return Either the signature, or std::nullopt if that failed.
 	 */
-	static std::optional<std::vector<Encoding>>
+	[[nodiscard]] static std::optional<std::vector<Encoding>>
 	sign_data(const EVP_PKEY_RAII& privateKey,
 	          const std::span<const std::uint8_t>& data);
 
@@ -184,7 +181,7 @@ public:
 	 * @return Either a boolean representing if the signature matches, or
 	 *         std::nullopt if a failure occurred.
 	 */
-	static std::optional<bool>
+	[[nodiscard]] static std::optional<bool>
 	check_signature(const EVP_PKEY_RAII& publicKey,
 	                const std::span<const std::uint8_t>& data,
 	                const std::span<const std::uint8_t>& signature);

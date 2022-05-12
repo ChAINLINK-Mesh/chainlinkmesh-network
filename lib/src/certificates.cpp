@@ -470,7 +470,7 @@ GenericCertificateManager<Encoding>::sign_data(
 
 	EVP_MD_CTX_RAII digestCtx{ EVP_MD_CTX_new() };
 
-	if (!digestCtx) {
+	if (digestCtx == nullptr) {
 		return std::nullopt;
 	}
 
@@ -503,17 +503,20 @@ template <std::integral Encoding>
 std::optional<bool> GenericCertificateManager<Encoding>::check_signature(
     const EVP_PKEY_RAII& publicKey, const std::span<const std::uint8_t>& data,
     const std::span<const std::uint8_t>& signature) {
-	EVP_PKEY_CTX_RAII pkeyCtx{ EVP_PKEY_CTX_new(publicKey.get(), nullptr) };
+	EVP_MD_CTX_RAII digestCtx{ EVP_MD_CTX_new() };
 
-	if (pkeyCtx == nullptr) {
+	if (digestCtx == nullptr) {
 		return std::nullopt;
 	}
 
-	if (EVP_PKEY_verify_init(pkeyCtx.get()) != 1) {
+	if (EVP_DigestVerifyInit(digestCtx.get(), nullptr, EVP_sha256(), nullptr,
+	                         publicKey.get()) != 1) {
 		return std::nullopt;
 	}
 
-	const auto verifyResult = EVP_PKEY_verify(pkeyCtx.get(), signature.data(), signature.size(), data.data(), data.size());
+	const auto verifyResult =
+	    EVP_DigestVerify(digestCtx.get(), signature.data(), signature.size(),
+	                     data.data(), data.size());
 
 	// A result of less than 0 indicates an error occurred.
 	if (verifyResult < 0) {
