@@ -91,10 +91,12 @@ namespace PrivateProtocol {
 		/**
 		 * @brief Informs an existing peer node about a new peer.
 		 *
-		 * @param nodeID The existing peer's ID.
-		 * @param peer The new peer's details.
+		 *        Requires the existing peer node's connection details to be known.
+		 *
+		 * @param node The existing peer's details.
+		 * @param newPeer The new peer's details.
 		 */
-		void inform_node_about_new_peer(std::uint64_t nodeID, const Node& peer);
+		void inform_node_about_new_peer(const Node& node, const Node& newPeer);
 
 		class ConnectionFactory : public Poco::Net::TCPServerConnectionFactory {
 		public:
@@ -127,4 +129,69 @@ namespace PrivateProtocol {
 		// Specific handling functions.
 		void handle_peer_inform(const PrivateProtocol::MessageT& message);
 	};
+
+	class PrivateProtocolClient {
+	public:
+		/**
+		 * @brief Creates a client which handles a connection to a peer.
+		 *
+		 *        Requires the peer's connection details to be known.
+		 *
+		 * @param peer The peer to connect to.
+		 */
+		PrivateProtocolClient(Node peer);
+
+		/**
+		 * @brief Sends a message table to the peer, and receives response.
+		 *
+		 * @param message The Flatbuffer message to send.
+		 * @return The response message, or the error which occurred.
+		 */
+		Expected<MessageT> send_message(const MessageT& message);
+
+		/**
+		 * @brief Sends a message table to the peer, without waiting for a response.
+		 *
+		 * @param message The Flatbuffer message to send.
+		 * @return The error which occurred, if any.
+		 */
+		Expected<void> send_message_nowait(const MessageT& message);
+
+		/**
+		 * @brief Sends a message (using a pre-established connection) to a peer,
+		 *        waiting for a response.
+		 *
+		 * @param socket The existing connection's socket.
+		 * @param message The Flatbuffer message to send.
+		 * @return The response message, or the error which occurred.
+		 */
+		static Expected<MessageT> send_message(Poco::Net::StreamSocket& socket,
+		                                       const MessageT& message);
+
+		/**
+		 * @brief Sends a message (using a pre-established connection) to a peer,
+		 *        without waiting for a response.
+		 *
+		 * @param socket The existing connection's socket.
+		 * @param message The Flatbuffer message to send.
+		 * @return The response message, or the error which occurred.
+		 */
+		static Expected<void> send_message_nowait(Poco::Net::StreamSocket& socket,
+		                                          const MessageT& message);
+
+	protected:
+		Node peer;
+	};
+
+	// Utility functions for working with the Flatbuffers library
+	template <typename T>
+	flatbuffers::Optional<T> to_flatbuffers(const std::optional<T>& val) {
+		flatbuffers::Optional<T> fb{ flatbuffers::nullopt };
+
+		if (val.has_value()) {
+			fb = val.value();
+		}
+
+		return fb;
+	}
 } // namespace PrivateProtocol

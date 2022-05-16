@@ -44,7 +44,7 @@ LinuxWireGuardManager::LinuxWireGuardManager(
 	        .public_key = {},
 	        .private_key = {},
 	        .fwmark = 0,
-	        .listen_port = self.wireGuardPort,
+	        .listen_port = self.connectionDetails->wireGuardPort,
 	        .first_peer = nullptr,
 	        .last_peer = nullptr,
 	    } },
@@ -389,10 +389,17 @@ wg_peer* LinuxWireGuardManager::wg_peer_from_peer(const Peer& peer) {
 
 LinuxWireGuardManager::Peer
 LinuxWireGuardManager::peer_from_node(const Node& node) const {
+	std::optional<Poco::Net::SocketAddress> endpoint{};
+
+	if (node.connectionDetails.has_value()) {
+		endpoint = Poco::Net::SocketAddress{
+			node.connectionDetails->wireGuardHost,
+			node.connectionDetails->wireGuardPort,
+		};
+	}
 	return Peer{
 		.publicKey = node.wireGuardPublicKey,
-		.endpoint =
-		    Poco::Net::SocketAddress{ node.wireGuardHost, node.wireGuardPort },
+		.endpoint = endpoint,
 		.internalAddress = node.controlPlaneIP,
 		.keepalive_interval = (parentID.has_value() && node.id == parentID.value())
 		                          ? KEEPALIVE_INTERVAL

@@ -3,12 +3,18 @@
 #include "private-protocol_generated.h"
 #include "wireguard.hpp"
 
+#include <Poco/Net/NetException.h>
 #include <Poco/Net/StreamSocket.h>
 #include <Poco/Net/TCPServerConnection.h>
+#include <exception>
+#include <limits>
+#include <stdexcept>
 
 extern "C" {
 #include <openssl/obj_mac.h>
 #include <openssl/x509.h>
+
+#include <memory>
 };
 
 namespace PrivateProtocol {
@@ -64,22 +70,39 @@ namespace PrivateProtocol {
 					continue;
 				}
 
-				inform_node_about_new_peer(neighbour.id, node);
+				// If we have a node's cryptographic details but not their connection
+				// details, then don't send to them.
+				if (!neighbour.connectionDetails.has_value()) {
+					continue;
+				}
+
+				inform_node_about_new_peer(neighbour, node);
 			}
 		}
 
 		return addedPeer;
 	}
 
-	void PrivateProtocolManager::inform_node_about_new_peer(std::uint64_t nodeID,
-	                                                        const Node& peer) {
-		PeerInformCommandT peerInformCommand{
-			.peer_id = peer.id,
-			.certificate = GenericCertificateManager<char>::encode_pem(
-			    peer.controlPlaneCertificate),
-			.wireguard_address = static_cast<std::string>(peer.wireGuardHost),
-			.private_proto_port = peer.controlPlanePort,
-		};
+	void PrivateProtocolManager::inform_node_about_new_peer(const Node& node,
+	                                                        const Node& newPeer) {
+		// Requires knowing connection details to contact 'node'.
+		assert(node.connectionDetails);
+
+		PeerInformCommandT peerInformCommand{};
+		peerInformCommand.peer_id = newPeer.id,
+		peerInformCommand.certificate = GenericCertificateManager<char>::encode_pem(
+		    newPeer.controlPlaneCertificate);
+		peerInformCommand.parent = to_flatbuffers(newPeer.parent);
+
+		// If we have connection details for the new peer.
+		if (newPeer.connectionDetails) {
+			peerInformCommand.connection_details =
+			    std::make_unique<PeerConnectionDetailsT>(PeerConnectionDetailsT{
+			        .wireguard_address = static_cast<std::string>(
+			            newPeer.connectionDetails->wireGuardHost),
+			        .private_proto_port = newPeer.connectionDetails->controlPlanePort,
+			    });
+		}
 
 		PrivateProtocol::CommandUnion command{};
 		command.Set(peerInformCommand);
@@ -100,6 +123,8 @@ namespace PrivateProtocol {
 		MessageT message{ .originator = selfNode.id,
 			                .command = command,
 			                .signature = signature.value() };
+
+		PrivateProtocolClient{ node }.send_message(message);
 	}
 
 	PrivateConnection::PrivateConnection(const Poco::Net::StreamSocket& socket,
@@ -178,6 +203,8 @@ namespace PrivateProtocol {
 			.command = command,
 			.signature = signature.value(),
 		};
+
+		PrivateProtocolClient::send_message_nowait(socket(), message);
 	}
 
 	void PrivateConnection::handle_peer_inform(
@@ -225,18 +252,103 @@ namespace PrivateProtocol {
 		const auto peerControlPlaneIP =
 		    Node::get_control_plane_ip(peerInform->peer_id);
 
-		const Host wireGuardHost{ peerInform->wireguard_address };
+		std::optional<NodeConnection> nodeConnection{};
+
+		if (peerInform->connection_details != nullptr) {
+			Host wireGuardHost =
+			    Host{ peerInform->connection_details->wireguard_address };
+
+			nodeConnection = {
+				.controlPlanePort = peerInform->connection_details->private_proto_port,
+				.wireGuardHost = wireGuardHost,
+				.wireGuardPort =
+				    wireGuardHost.port().value_or(Node::DEFAULT_WIREGUARD_PORT),
+			};
+		}
 
 		parent.peers->add_peer(Node{
 		    .id = peerInform->peer_id,
 		    .controlPlanePublicKey = peerPublicKey.value(),
 		    .wireGuardPublicKey = wireGuardPublicKey,
 		    .controlPlaneIP = peerControlPlaneIP,
-		    .controlPlanePort = peerInform->private_proto_port,
-		    .wireGuardHost = wireGuardHost,
-		    .wireGuardPort =
-		        wireGuardHost.port().value_or(Node::DEFAULT_WIREGUARD_PORT),
+		    .connectionDetails = nodeConnection,
 		    .parent = peerInform->parent,
 		});
+	}
+
+	PrivateProtocolClient::PrivateProtocolClient(Node peer)
+	    : peer{ std::move(peer) } {
+		assert(peer.connectionDetails);
+	}
+
+	Expected<MessageT>
+	PrivateProtocolClient::send_message(const MessageT& message) {
+		try {
+			Poco::Net::StreamSocket peerSocket{ Poco::Net::SocketAddress{
+				  peer.controlPlaneIP,
+				  peer.connectionDetails->controlPlanePort,
+			} };
+			return send_message(peerSocket, message);
+		} catch (Poco::InvalidArgumentException& e) {
+			return std::make_exception_ptr(e);
+		}
+	}
+
+	Expected<void>
+	PrivateProtocolClient::send_message_nowait(const MessageT& message) {
+		try {
+			Poco::Net::StreamSocket peerSocket{ Poco::Net::SocketAddress{
+				  peer.controlPlaneIP,
+				  peer.connectionDetails->controlPlanePort,
+			} };
+
+			send_message_nowait(peerSocket, message);
+			return std::nullopt;
+		} catch (Poco::InvalidArgumentException& e) {
+			return std::make_exception_ptr(e);
+		}
+	}
+
+	Expected<MessageT>
+	PrivateProtocolClient::send_message(Poco::Net::StreamSocket& socket,
+	                                    const MessageT& message) {
+		try {
+			send_message_nowait(socket, message);
+			Poco::Net::SocketBufVec buf{};
+			socket.receiveBytes(buf);
+			const std::span<const std::uint8_t> bufData{
+				reinterpret_cast<const std::uint8_t*>(buf.data()), buf.size()
+			};
+
+			const auto response = PrivateProtocolManager::decode_packet(bufData);
+
+			if (!response.has_value()) {
+				return std::make_exception_ptr(
+				    std::runtime_error{ "Could not decode response packet" });
+			}
+
+			return response.value();
+		} catch (Poco::Net::NetException& e) {
+			return std::make_exception_ptr(e);
+		}
+	}
+
+	Expected<void>
+	PrivateProtocolClient::send_message_nowait(Poco::Net::StreamSocket& socket,
+	                                           const MessageT& message) {
+		flatbuffers::FlatBufferBuilder fbb{};
+		fbb.Finish(Message::Pack(fbb, &message));
+
+		const auto fbbBuffer = fbb.GetBufferSpan();
+		assert(fbbBuffer.size_bytes() < std::numeric_limits<int>::max());
+
+		try {
+			socket.sendBytes(fbb.GetBufferSpan().data(),
+			                 static_cast<int>(fbb.GetBufferSpan().size_bytes()));
+		} catch (Poco::Net::NetException& e) {
+			return std::make_exception_ptr(e);
+		}
+
+		return std::nullopt;
 	}
 } // namespace PrivateProtocol

@@ -3,6 +3,7 @@
 #include "clock.hpp"
 #include "linux-wireguard-manager.hpp"
 #include "literals.hpp"
+#include "private-protocol.hpp"
 #include "public-protocol.hpp"
 #include "server.hpp"
 #include "types.hpp"
@@ -23,13 +24,15 @@
 #include <chrono>
 #include <cstdlib>
 #include <exception>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <variant>
 
 const constexpr std::string_view SERVER_IP_PLACEHOLDER = "SERVER_IP_HERE";
-const constexpr std::string_view SERVER_CONFIG_FILE = "/tmp/chainlink.conf";
+const constexpr std::string_view SERVER_CONFIG_FILE =
+    "/etc/chainlink/chainlink.conf";
 
 void ServerDaemon::defineOptions(Poco::Util::OptionSet& options) {
 	using Poco::Util::Option;
@@ -42,6 +45,11 @@ void ServerDaemon::defineOptions(Poco::Util::OptionSet& options) {
 	                      .repeatable(false)
 	                      .callback(OptionCallback<ServerDaemon>{
 	                          this, &ServerDaemon::handle_help }));
+	options.addOption(Option{ "config", "", "configuration file to use" }
+	                      .required(false)
+	                      .repeatable(false)
+	                      .argument("configuration", true)
+	                      .binding("configuration"));
 	options.addOption(Option{ "client", "c", "setup node to connect to a parent" }
 	                      .required(false)
 	                      .repeatable(false)
@@ -145,6 +153,13 @@ void ServerDaemon::defineOptions(Poco::Util::OptionSet& options) {
 	        .repeatable(false)
 	        .argument("addr")
 	        .binding("wireguard-address"));
+	options.addOption(
+	    Option{ "private-port", "",
+	            "the port to listen on for private control-plane traffic" }
+	        .required(false)
+	        .repeatable(false)
+	        .argument("port")
+	        .binding("private-port"));
 }
 
 void ServerDaemon::initialize(Poco::Util::Application& self) {
@@ -189,13 +204,69 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 	std::optional<std::uint64_t> parent{};
 
 	Poco::AutoPtr<Poco::Util::PropertyFileConfiguration> savedConfig{};
+	const auto hasConfigurationSpecified = config().hasProperty("configuration");
+
+	// Set default server configuration directory.
+	if (!hasConfigurationSpecified) {
+		config().setString("configuration", std::string{ SERVER_CONFIG_FILE });
+	}
+
+	std::string configFileLocation = config().getString("configuration");
+
+	const auto handlePropertyLoadException =
+	    [hasConfigurationSpecified,
+	     &configFileLocation = std::as_const(configFileLocation),
+	     &logger = logger()]() {
+		    std::filesystem::path configFilePath{ configFileLocation };
+
+		    if (hasConfigurationSpecified) {
+			    // User specified an invalid configuration file location, warn them of
+			    // this.
+			    if (const auto parentPath = configFilePath.parent_path();
+			        !std::filesystem::exists(parentPath)) {
+				    // We must error here, since we cannot necessarily save the
+				    // configuration on-exit otherwise.
+				    logger.fatal("Configuration path '" +
+				                 parentPath.lexically_normal().string() +
+				                 "' does not exist!\n");
+				    return false;
+			    }
+
+			    // Path exists, so we can save afterwards, but no existing
+			    // configuration.
+		    } else if (const auto parentPath = configFilePath.parent_path();
+		               !std::filesystem::exists(parentPath)) {
+			    // Path doesn't exist at standard location, so we need to make it.
+
+			    std::error_code directoryCreationErrorCode{};
+			    if (!std::filesystem::create_directory(parentPath,
+			                                           directoryCreationErrorCode)) {
+				    logger.fatal("Expected to save configuration to '" +
+				                 parentPath.lexically_normal().string() +
+				                 "' but couldn't create directory: " +
+				                 directoryCreationErrorCode.message() + "\n");
+				    return false;
+			    }
+		    }
+
+		    // Ignore failure to open config. This just indicates we have to parse
+		    // the commandline flags instead.
+		    logger.warning("Could not open specified configuration file: " +
+		                   configFilePath.lexically_normal().string());
+		    return true;
+	    };
 
 	try {
-		savedConfig = new Poco::Util::PropertyFileConfiguration{ std::string{
-			  SERVER_CONFIG_FILE } };
-	} catch (const Poco::FileNotFoundException& e) {
-		// Ignore failure to open config. This just indicates we have to parse the
-		// commandline flags instead.
+		savedConfig =
+		    new Poco::Util::PropertyFileConfiguration{ configFileLocation };
+	} catch (const Poco::FileNotFoundException& /* ignored */) {
+		if (!handlePropertyLoadException()) {
+			return;
+		}
+	} catch (const Poco::FileAccessDeniedException& /* ignored */) {
+		if (!handlePropertyLoadException()) {
+			return;
+		}
 	}
 
 	std::optional<Server::Configuration> configuration{};
@@ -337,9 +408,12 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 				    .controlPlanePublicKey = {},
 				    .wireGuardPublicKey = resp.respondingWireGuardPublicKey,
 				    .controlPlaneIP = resp.respondingControlPlaneIPAddress,
-				    .controlPlanePort = resp.respondingControlPlanePort,
-				    .wireGuardHost = client.get_parent_address(resp),
-				    .wireGuardPort = resp.respondingWireGuardPort,
+				    .connectionDetails =
+				        NodeConnection{
+				            .controlPlanePort = resp.respondingControlPlanePort,
+				            .wireGuardHost = client.get_parent_address(resp),
+				            .wireGuardPort = resp.respondingWireGuardPort,
+				        },
 				    .controlPlaneCertificate = {},
 				});
 				id = resp.allocatedNode;
@@ -380,6 +454,9 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 		    "psk-ttl", PublicProtocol::PublicProtocolManager::DEFAULT_PSK_TTL);
 		psk = psk.value_or(PublicProtocol::PublicProtocolManager::DEFAULT_PSK);
 
+		const auto privateProtocolPort = config().getUInt(
+		    "private-port", PrivateProtocol::DEFAULT_CONTROL_PLANE_PORT);
+
 		configuration = Server::Configuration{
 			.id = id,
 			.parent = parent,
@@ -390,7 +467,7 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 			    "wireguard-address",
 			    "0.0.0.0:" + std::to_string(Node::DEFAULT_WIREGUARD_PORT)) },
 			.publicProtoAddress = publicAddress,
-			.privateProtoPort = std::nullopt,
+			.privateProtoPort = privateProtocolPort,
 			.controlPlaneCertificate = certificate,
 			.psk = psk.value(),
 			.pskTTL = pskTTL,
@@ -443,7 +520,9 @@ int ServerDaemon::main(const std::vector<std::string>& args) {
 	server->stop();
 
 	// TODO: Install failure handler to set the interface back down.
-	get_configuration()->save(std::string{ SERVER_CONFIG_FILE });
+
+	// Configuration path guaranteed to be set to a default value at least.
+	get_configuration()->save(config().getString("configuration"));
 
 	return EXIT_OK;
 }

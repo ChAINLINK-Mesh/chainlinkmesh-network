@@ -2,6 +2,7 @@
 #include "certificates.hpp"
 #include "clock.hpp"
 #include "linux-wireguard-manager.hpp"
+#include "node.hpp"
 #include "private-protocol.hpp"
 #include "public-protocol.hpp"
 #include "types.hpp"
@@ -74,7 +75,7 @@ Server::Server(const Server::Configuration& config)
       peers{ std::make_shared<LinuxPeers>(config.peers, wgManager) },
       publicProtoAddress{ config.publicProtoAddress.value_or(
 	        default_public_proto_address(config.wireGuardAddress)) },
-      privateProtoPort{ self.controlPlanePort },
+      privateProtoPort{ self.connectionDetails->controlPlanePort },
       wireGuardAddress{ config.wireGuardAddress },
       privateProtoManager{ PrivateProtocolManager::Configuration{
 	        .controlPlanePort = config.privateProtoPort.value_or(
@@ -130,8 +131,9 @@ Poco::Net::SocketAddress Server::get_public_proto_address() const {
 }
 
 Poco::Net::SocketAddress Server::get_private_proto_address() const {
-	return Poco::Net::SocketAddress{ this->self.controlPlaneIP,
-		                               this->self.controlPlanePort };
+	return Poco::Net::SocketAddress{
+		this->self.controlPlaneIP, this->self.connectionDetails->controlPlanePort
+	};
 }
 
 Poco::Net::SocketAddress Server::get_wireguard_address() const {
@@ -169,9 +171,12 @@ SelfNode Server::get_self(const Server::Configuration& config) {
 		    .controlPlanePublicKey = config.controlPlanePrivateKey,
 		    .wireGuardPublicKey = config.meshPublicKey,
 		    .controlPlaneIP = privateProtoHost,
-		    .controlPlanePort = privateProtoPort,
-		    .wireGuardHost = Host{ config.wireGuardAddress },
-		    .wireGuardPort = config.wireGuardAddress.port(),
+		    .connectionDetails =
+		        NodeConnection{
+		            .controlPlanePort = privateProtoPort,
+		            .wireGuardHost = Host{ config.wireGuardAddress },
+		            .wireGuardPort = config.wireGuardAddress.port(),
+		        },
 		    .controlPlaneCertificate = config.controlPlaneCertificate,
 		    .parent = config.parent,
 		},
@@ -350,9 +355,12 @@ Expected<Server::Configuration> Server::get_configuration_from_saved_config(
 				.controlPlanePublicKey = peerControlPlanePublicKey.value(),
 				.wireGuardPublicKey = {},
 				.controlPlaneIP = peerControlPlaneAddress.host(),
-				.controlPlanePort = peerControlPlaneAddress.port(),
-				.wireGuardHost = Host{ peerWireGuardAddress.host() },
-				.wireGuardPort = peerWireGuardAddress.port(),
+				.connectionDetails =
+				    NodeConnection{
+				        .controlPlanePort = peerControlPlaneAddress.port(),
+				        .wireGuardHost = Host{ peerWireGuardAddress.host() },
+				        .wireGuardPort = peerWireGuardAddress.port(),
+				    },
 				.controlPlaneCertificate = peerControlPlaneCertificate.value(),
 				.parent = peerParent,
 			};
@@ -417,15 +425,26 @@ Server::get_node_configuration(const Node& node) {
 	                         CertEncoder::encode_pem(node.controlPlanePublicKey));
 	configuration->setString(nodeName + ".wireguard-public-key",
 	                         base64_encode(node.wireGuardPublicKey).value());
-	configuration->setString(
-	    nodeName + ".control-plane-address",
-	    Poco::Net::SocketAddress{ node.controlPlaneIP, node.controlPlanePort }
-	        .toString());
-	// TODO: Encode the raw Host value, to avoid losing DNS lookup functionality.
-	configuration->setString(
-	    nodeName + ".wireguard-address",
-	    Poco::Net::SocketAddress{ node.wireGuardHost, node.wireGuardPort }
-	        .toString());
+
+	Poco::Net::SocketAddress nodeControlPlaneAddress{
+		node.controlPlaneIP, PrivateProtocol::DEFAULT_CONTROL_PLANE_PORT
+	};
+	if (node.connectionDetails.has_value()) {
+		// TODO: Encode the raw Host value, to avoid losing DNS lookup
+		// functionality.
+		configuration->setString(
+		    nodeName + ".wireguard-address",
+		    Poco::Net::SocketAddress{ node.connectionDetails->wireGuardHost,
+		                              node.connectionDetails->wireGuardPort }
+		        .toString());
+		nodeControlPlaneAddress =
+		    Poco::Net::SocketAddress{ node.controlPlaneIP,
+			                            node.connectionDetails->controlPlanePort };
+	}
+
+	configuration->setString(nodeName + ".control-plane-address",
+
+	                         nodeControlPlaneAddress.toString());
 	configuration->setString(
 	    nodeName + ".control-plane-certificate",
 	    CertEncoder::encode_pem(node.controlPlaneCertificate));

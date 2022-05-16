@@ -2,12 +2,16 @@
 
 namespace PrivateProtocol;
 
+table PeerConnectionDetails {
+	wireguard_address:string;
+	private_proto_port:uint16;
+}
+
 table PeerInformCommand {
 	peer_id:uint64;
 	// Certificate chain (from root) in PEM format
 	certificate:string;
-	wireguard_address:string;
-	private_proto_port:uint16;
+	connection_details:PeerConnectionDetails;
 	parent:uint64 = null;
 }
 

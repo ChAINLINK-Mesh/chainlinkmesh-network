@@ -200,9 +200,12 @@ Node get_random_peer(std::optional<std::uint64_t> parentID) {
 		.controlPlanePublicKey = peerControlPlanePubkey,
 		.wireGuardPublicKey = wgPublicKey,
 		.controlPlaneIP = Node::get_control_plane_ip(id),
-		.controlPlanePort = testPorts.privateProtoAddress.port(),
-		.wireGuardHost = Host{ testPorts.wireGuardAddress },
-		.wireGuardPort = testPorts.wireGuardAddress.port(),
+		.connectionDetails =
+		    NodeConnection{
+		        .controlPlanePort = testPorts.privateProtoAddress.port(),
+		        .wireGuardHost = Host{ testPorts.wireGuardAddress },
+		        .wireGuardPort = testPorts.wireGuardAddress.port(),
+		    },
 		.controlPlaneCertificate = certificate,
 		.parent = parentID,
 	};

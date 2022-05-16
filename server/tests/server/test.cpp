@@ -1,5 +1,6 @@
 #include "test.hpp"
 #include "certificates.hpp"
+#include "node.hpp"
 #include "public-protocol.hpp"
 #include "wireguard.hpp"
 
@@ -148,9 +149,12 @@ Server::Configuration get_child_config(const TestPorts& testPorts,
 		    .controlPlanePublicKey = {},
 		    .wireGuardPublicKey = response.respondingWireGuardPublicKey,
 		    .controlPlaneIP = response.respondingControlPlaneIPAddress,
-		    .controlPlanePort = response.respondingControlPlanePort,
-		    .wireGuardHost = client.get_parent_address(response),
-		    .wireGuardPort = response.respondingWireGuardPort,
+		    .connectionDetails =
+		        NodeConnection{
+		            .controlPlanePort = response.respondingControlPlanePort,
+		            .wireGuardHost = client.get_parent_address(response),
+		            .wireGuardPort = response.respondingWireGuardPort,
+		        },
 		    .controlPlaneCertificate = {},
 		    .parent = std::nullopt,
 		} },

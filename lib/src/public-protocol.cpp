@@ -36,8 +36,9 @@ PublicProtocolManager::PublicProtocolManager(Configuration config)
       idDistribution{ Node::generate_id_range() },
       randomEngine{ config.randomEngine }, peers{ config.peers },
       privateProtocolManager{ config.privateProtocolManager } {
+	assert(selfNode.connectionDetails);
 	// Ensure that the current node's host is specified as a valid address.
-	assert(selfNode.wireGuardHost);
+	assert(selfNode.connectionDetails->wireGuardHost);
 	assert(peers);
 
 	this->peers->add_peer(selfNode);
@@ -308,9 +309,11 @@ PublicProtocolManager::create_response(InitialisationPacket packet) {
 		.allocatedNode = this->idDistribution(this->randomEngine),
 		.respondingWireGuardPublicKey = this->selfNode.wireGuardPublicKey,
 		.respondingControlPlaneIPAddress = this->selfNode.controlPlaneIP,
-		.respondingWireGuardIPAddress = this->selfNode.wireGuardHost,
-		.respondingControlPlanePort = this->selfNode.controlPlanePort,
-		.respondingWireGuardPort = this->selfNode.wireGuardPort,
+		.respondingWireGuardIPAddress =
+		    this->selfNode.connectionDetails->wireGuardHost,
+		.respondingControlPlanePort =
+		    this->selfNode.connectionDetails->controlPlanePort,
+		.respondingWireGuardPort = this->selfNode.connectionDetails->wireGuardPort,
 		.certificateChain = { signedCSR.value() },
 	};
 }
@@ -378,16 +381,20 @@ void PublicConnection::run() {
 		std::copy(subjectUserID.value().begin(), subjectUserID.value().end(),
 		          peerWGPubkey.begin());
 
-		// TODO: Don't just rely on the default WireGuard port
+		// TODO: Don't just rely on the default WireGuard port, or potentially mark
+		// connection details as unknown.
 		const auto peer = Node{
 			.id = responsePacket->allocatedNode,
 			.controlPlanePublicKey = certificatePubkey.value(),
 			.wireGuardPublicKey = peerWGPubkey,
 			.controlPlaneIP =
 			    Node::get_control_plane_ip(responsePacket->allocatedNode),
-			.controlPlanePort = 0,
-			.wireGuardHost = Host{ socket().peerAddress().host() },
-			.wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,
+			.connectionDetails =
+			    NodeConnection{
+			        .controlPlanePort = 0,
+			        .wireGuardHost = Host{ socket().peerAddress().host() },
+			        .wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,
+			    },
 			.controlPlaneCertificate = peerCertificate,
 			.parent = packet->referringNode,
 		};

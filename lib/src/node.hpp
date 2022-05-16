@@ -6,14 +6,18 @@
 #include <Poco/Net/IPAddress.h>
 #include <random>
 
+struct NodeConnection {
+	std::uint16_t controlPlanePort;
+	Host wireGuardHost;
+	std::uint16_t wireGuardPort;
+};
+
 struct Node {
 	std::uint64_t id;
 	EVP_PKEY_RAII controlPlanePublicKey;
 	AbstractWireGuardManager::Key wireGuardPublicKey;
 	Poco::Net::IPAddress controlPlaneIP;
-	std::uint16_t controlPlanePort;
-	Host wireGuardHost;
-	std::uint16_t wireGuardPort;
+	std::optional<NodeConnection> connectionDetails;
 	X509_RAII controlPlaneCertificate;
 	std::optional<std::uint64_t> parent;
 

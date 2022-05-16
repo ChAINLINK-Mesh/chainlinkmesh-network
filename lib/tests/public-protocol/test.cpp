@@ -186,9 +186,12 @@ SelfNode get_self_node() {
 		    .controlPlanePublicKey = privateKey.value(),
 		    .wireGuardPublicKey = wireguardPubkey,
 		    .controlPlaneIP = Poco::Net::IPAddress{ "10.0.0.1" },
-		    .controlPlanePort = PrivateProtocol::DEFAULT_CONTROL_PLANE_PORT,
-		    .wireGuardHost = Host{ "127.0.0.1" },
-		    .wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,
+		    .connectionDetails =
+		        NodeConnection{
+		            .controlPlanePort = PrivateProtocol::DEFAULT_CONTROL_PLANE_PORT,
+		            .wireGuardHost = Host{ "127.0.0.1" },
+		            .wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,
+		        },
 		    .controlPlaneCertificate = certificate.value(),
 		    .parent = std::nullopt,
 		},

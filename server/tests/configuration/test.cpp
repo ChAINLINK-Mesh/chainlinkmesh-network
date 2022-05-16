@@ -103,11 +103,12 @@ void test_peers() {
 	assert(propFile->getString(nodeName + ".wireguard-public-key") ==
 	       base64_encode(peer.wireGuardPublicKey).value());
 	assert((propFile->getString(nodeName + ".control-plane-address") ==
-	        Poco::Net::SocketAddress{ peer.controlPlaneIP, peer.controlPlanePort }
+	        Poco::Net::SocketAddress{ peer.controlPlaneIP,
+	                                  peer.connectionDetails->controlPlanePort }
 	            .toString()));
 	const auto wgAddress = propFile->getString(nodeName + ".wireguard-address");
-	const Poco::Net::IPAddress wgIP = peer.wireGuardHost;
-	const auto wgPort = peer.wireGuardPort;
+	const Poco::Net::IPAddress wgIP = peer.connectionDetails->wireGuardHost;
+	const auto wgPort = peer.connectionDetails->wireGuardPort;
 	assert((wgAddress == Poco::Net::SocketAddress{ wgIP, wgPort }.toString()));
 	assert(propFile->getString(nodeName + ".control-plane-certificate") ==
 	       Encoder::encode_pem(peer.controlPlaneCertificate));
@@ -297,9 +298,12 @@ Node get_random_peer(std::optional<std::uint64_t> parentID) {
 		.controlPlanePublicKey = peerControlPlanePubkey,
 		.wireGuardPublicKey = peerConfig.meshPublicKey,
 		.controlPlaneIP = Node::get_control_plane_ip(peerConfig.id.value()),
-		.controlPlanePort = peerConfig.privateProtoPort.value(),
-		.wireGuardHost = Host{ peerConfig.wireGuardAddress.host() },
-		.wireGuardPort = peerConfig.privateProtoPort.value(),
+		.connectionDetails =
+		    NodeConnection{
+		        .controlPlanePort = peerConfig.privateProtoPort.value(),
+		        .wireGuardHost = Host{ peerConfig.wireGuardAddress.host() },
+		        .wireGuardPort = peerConfig.privateProtoPort.value(),
+		    },
 		.controlPlaneCertificate = peerConfig.controlPlaneCertificate,
 		.parent = parentID,
 	};
