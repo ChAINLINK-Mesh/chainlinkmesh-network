@@ -1,11 +1,14 @@
 #!/usr/bin/env -S sh -c 'printf "This file is meant to be sourced!\n" ; false'
 
-SERVER_CMD="${PWD}/server/wgmesh-server"
+if [ -z "${SERVER_CMD}" ]; then
+	SERVER_CMD="${PWD}/server/wgmesh-server"
 
-if [ ! -x "${SERVER_CMD}" ]; then
-	printf "Could not find server executable at location %s\n" "${SERVER_CMD}" >/dev/stderr
-	exit 1
+	if [ ! -x "${SERVER_CMD}" ]; then
+		printf "Could not find server executable at location %s\n" "${SERVER_CMD}" >/dev/stderr
+		exit 1
+	fi
 fi
+
 
 TEST_DATA_DIR="/tmp/chainlink/"
 TEST_INSTANCE_PREFIX="instance_"
