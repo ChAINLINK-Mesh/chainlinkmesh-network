@@ -168,7 +168,8 @@ public:
 	Poco::AutoPtr<Poco::Util::PropertyFileConfiguration>
 	get_configuration() const;
 
-	static Expected<Configuration> get_configuration_from_saved_config(
+	[[nodiscard]] static Expected<Configuration>
+	get_configuration_from_saved_config(
 	    const Poco::AutoPtr<Poco::Util::PropertyFileConfiguration>& properties);
 
 protected:

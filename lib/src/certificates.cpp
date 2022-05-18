@@ -4,6 +4,7 @@
 #include "utilities.hpp"
 
 #include <cassert>
+#include <cstdint>
 #include <cstring>
 #include <fstream>
 #include <limits>
@@ -16,6 +17,7 @@ extern "C" {
 #include <openssl/bio.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
+#include <openssl/obj_mac.h>
 #include <openssl/pem.h>
 #include <openssl/rsa.h>
 #include <openssl/x509.h>
@@ -52,6 +54,7 @@ template <std::integral Encoding>
 [[nodiscard]] std::optional<X509_RAII>
 GenericCertificateManager<Encoding>::generate_certificate(
     const CertificateInfo& certificateInfo, const EVP_PKEY_RAII& rsaKey) {
+	assert(certificateInfo.serialNumber.has_value());
 	assert(certificateInfo.validityDuration < std::numeric_limits<long>::max());
 
 	if (debug_check(static_cast<int>(KEY_LENGTH) !=
@@ -105,6 +108,7 @@ template <std::integral Encoding>
 [[nodiscard]] std::optional<X509_REQ_RAII>
 GenericCertificateManager<Encoding>::generate_certificate_request(
     const CertificateInfo& certificateInfo) {
+	assert(!certificateInfo.serialNumber.has_value());
 	assert(certificateInfo.validityDuration < std::numeric_limits<long>::max());
 
 	// Generate RSA key
@@ -316,6 +320,43 @@ GenericCertificateManager<Encoding>::get_subject_attribute(
 	}
 
 	return attributes;
+}
+
+template <std::integral Encoding>
+bool GenericCertificateManager<Encoding>::set_subject_attribute(
+    X509_NAME* subject, int nid, const EncodingStringView& attributeValue) {
+	assert(attributeValue.size() < std::numeric_limits<int>::max());
+
+	int index = X509_NAME_get_index_by_NID(subject, nid, -1);
+
+	// Invalid NID provided.
+	if (index <= -2) {
+		return false;
+	}
+
+	// Existing entry for this NID not found, so create a new one.
+	if (index == -1) {
+		return X509_NAME_add_entry_by_NID(
+		           subject, nid, MBSTRING_UTF8,
+		           reinterpret_cast<const std::uint8_t*>(attributeValue.data()),
+		           static_cast<int>(attributeValue.size()), -1, 0) == 1;
+	}
+
+	// If we have multiple existing matching attributes, then fail.
+	if (X509_NAME_get_index_by_NID(subject, nid, -1) != -1) {
+		return false;
+	}
+
+	if (auto* const entry = X509_NAME_get_entry(subject, index);
+	    entry != nullptr) {
+		return X509_NAME_ENTRY_set_data(
+		           entry, MBSTRING_UTF8,
+		           reinterpret_cast<const std::uint8_t*>(attributeValue.data()),
+		           static_cast<int>(attributeValue.size())) == 1;
+	}
+
+	// Failed to get entry from index.
+	return false;
 }
 
 template <std::integral Encoding>
@@ -535,36 +576,38 @@ bool GenericCertificateManager<Encoding>::x509_set_name_from_certificate_info(
 	assert(certificateInfo.organisation.size() < std::numeric_limits<int>::max());
 	assert(certificateInfo.commonName.size() < std::numeric_limits<int>::max());
 	assert(certificateInfo.userID.size() < std::numeric_limits<int>::max());
+	assert(!certificateInfo.serialNumber.has_value() ||
+	       certificateInfo.serialNumber->size() <
+	           std::numeric_limits<int>::max());
 
-	// TODO: Replace the string codes with their enumerated versions.
-	// Also, "C" is likely to fail, due to the upper-bounds placed on the data
+	// TODO: "C" is likely to fail, due to the upper-bounds placed on the data
 	// length. See: https://datatracker.ietf.org/doc/html/rfc5280#appendix-A.1 '--
 	// Upper Bounds'
-	if (X509_NAME_add_entry_by_txt(
-	        x509Name, "C", MBSTRING_UTF8,
+	if (X509_NAME_add_entry_by_NID(
+	        x509Name, NID_countryName, MBSTRING_UTF8,
 	        reinterpret_cast<const unsigned char*>(
 	            certificateInfo.country.data()),
 	        static_cast<int>(certificateInfo.country.length()), -1, 0) != 1) {
 		return false;
 	}
 
-	if (X509_NAME_add_entry_by_txt(
-	        x509Name, "ST", MBSTRING_UTF8,
+	if (X509_NAME_add_entry_by_NID(
+	        x509Name, NID_stateOrProvinceName, MBSTRING_UTF8,
 	        reinterpret_cast<const unsigned char*>(
 	            certificateInfo.province.data()),
 	        static_cast<int>(certificateInfo.province.length()), -1, 0) != 1) {
 		return false;
 	}
 
-	if (X509_NAME_add_entry_by_txt(
-	        x509Name, "L", MBSTRING_UTF8,
+	if (X509_NAME_add_entry_by_NID(
+	        x509Name, NID_localityName, MBSTRING_UTF8,
 	        reinterpret_cast<const unsigned char*>(certificateInfo.city.data()),
 	        static_cast<int>(certificateInfo.city.length()), -1, 0) != 1) {
 		return false;
 	}
 
-	if (X509_NAME_add_entry_by_txt(
-	        x509Name, "O", MBSTRING_UTF8,
+	if (X509_NAME_add_entry_by_NID(
+	        x509Name, NID_organizationName, MBSTRING_UTF8,
 	        reinterpret_cast<const unsigned char*>(
 	            certificateInfo.organisation.data()),
 	        static_cast<int>(certificateInfo.organisation.length()), -1,
@@ -572,8 +615,8 @@ bool GenericCertificateManager<Encoding>::x509_set_name_from_certificate_info(
 		return false;
 	}
 
-	if (X509_NAME_add_entry_by_txt(
-	        x509Name, "CN", MBSTRING_UTF8,
+	if (X509_NAME_add_entry_by_NID(
+	        x509Name, NID_commonName, MBSTRING_UTF8,
 	        reinterpret_cast<const unsigned char*>(
 	            certificateInfo.commonName.data()),
 	        static_cast<int>(certificateInfo.commonName.length()), -1, 0) != 1) {
@@ -584,6 +627,16 @@ bool GenericCertificateManager<Encoding>::x509_set_name_from_certificate_info(
 	        x509Name, NID_userId, MBSTRING_UTF8,
 	        reinterpret_cast<const unsigned char*>(certificateInfo.userID.data()),
 	        static_cast<int>(certificateInfo.userID.length()), -1, 0) != 1) {
+		return false;
+	}
+
+	if (certificateInfo.serialNumber.has_value() &&
+	    X509_NAME_add_entry_by_NID(
+	        x509Name, NID_serialNumber, MBSTRING_UTF8,
+	        reinterpret_cast<const unsigned char*>(
+	            certificateInfo.serialNumber->data()),
+	        static_cast<int>(certificateInfo.serialNumber->length()), -1,
+	        0) != 1) {
 		return false;
 	}
 

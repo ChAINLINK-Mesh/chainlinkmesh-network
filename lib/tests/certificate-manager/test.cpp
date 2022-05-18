@@ -52,7 +52,18 @@ void generate_rsa_key() {
 }
 
 void generate_certificate() {
-	if (CertificateManager::generate_certificate(CertificateInfo{},
+	CertificateInfo certificateInfo{
+		.country = "GB",
+		.province = "England",
+		.city = "London",
+		.organisation = "Imperial College London",
+		.commonName = "imperial.ac.uk",
+		.userID = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
+		.serialNumber = "123456789",
+		.validityDuration = 900,
+	};
+
+	if (CertificateManager::generate_certificate(certificateInfo,
 	                                             EVP_PKEY_RAII{})) {
 		throw "Incorrectly created a certificate from invalid null private key";
 	}
@@ -65,6 +76,7 @@ void generate_certificate() {
 		.organisation = "",
 		.commonName = "",
 		.userID = "",
+		.serialNumber = "",
 		.validityDuration = 900,
 	};
 
@@ -72,16 +84,6 @@ void generate_certificate() {
 		throw "Incorrectly created certificate from invalid certificate "
 		      "information";
 	}
-
-	CertificateInfo certificateInfo{
-		.country = "GB",
-		.province = "England",
-		.city = "London",
-		.organisation = "Imperial College London",
-		.commonName = "imperial.ac.uk",
-		.userID = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
-		.validityDuration = 900,
-	};
 
 	const auto validCertificate =
 	    CertificateManager::generate_certificate(certificateInfo, key);
@@ -100,6 +102,7 @@ void generate_certificate_request() {
 	        .organisation = "Mozilla",
 	        .commonName = "www.mozilla.org",
 	        .userID = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
+	        .serialNumber = std::nullopt,
 	        .validityDuration = 60ULL * 60ULL * 24ULL * 365ULL * 10ULL,
 	    });
 
@@ -118,6 +121,7 @@ void equality_certificate() {
 	        .organisation = "Mozilla",
 	        .commonName = "www.mozilla.org",
 	        .userID = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
+	        .serialNumber = "123456789",
 	        .validityDuration = 60ULL * 60ULL * 24ULL * 365ULL * 10ULL,
 	    },
 	    key);
@@ -134,6 +138,7 @@ void equality_certificate() {
 	        .organisation = "Test",
 	        .commonName = "test.co.uk",
 	        .userID = "XJMrXJMrXJMrXJMrXJMrXJMrXJMrXJMrXJMrXJMrXJU=",
+	        .serialNumber = "123456789",
 	        .validityDuration = 60ULL * 60ULL * 24ULL * 365ULL * 10ULL,
 	    },
 	    key);
@@ -152,10 +157,11 @@ void equality_certificate_request() {
 	        .organisation = "Mozilla",
 	        .commonName = "www.mozilla.org",
 	        .userID = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
+	        .serialNumber = std::nullopt,
 	        .validityDuration = 60ULL * 60ULL * 24ULL * 365ULL * 10ULL,
 	    });
 
-	if (*certificateRequest1->get() != *certificateRequest1->get()) {
+	if (certificateRequest1.value() != certificateRequest1.value()) {
 		throw "Equality check on the same value returned 'inequal'";
 	}
 
@@ -167,10 +173,11 @@ void equality_certificate_request() {
 	        .organisation = "Test",
 	        .commonName = "test.co.uk",
 	        .userID = "XJMrXJMrXJMrXJMrXJMrXJMrXJMrXJMrXJMrXJMrXJU=",
+	        .serialNumber = std::nullopt,
 	        .validityDuration = 60ULL * 60ULL * 24ULL * 365ULL * 10ULL,
 	    });
 
-	if (*certificateRequest1->get() == *certificateRequest2->get()) {
+	if (certificateRequest1.value() == certificateRequest2.value()) {
 		throw "Equality check on a different value returned 'equal'";
 	}
 }

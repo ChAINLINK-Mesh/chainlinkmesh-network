@@ -174,7 +174,7 @@ Peers::get_certificate_chain(std::uint64_t nodeID) {
 
 bool Peers::validate_peer(const Node& peer) {
 	return peer.controlPlanePublicKey != nullptr &&
-	       static_cast<bool>(!peer.connectionDetails.has_value() ||
-	                         peer.connectionDetails->wireGuardHost) &&
+	       (!peer.connectionDetails.has_value() ||
+	        static_cast<bool>(peer.connectionDetails->wireGuardHost)) &&
 	       peer.controlPlaneCertificate != nullptr;
 }

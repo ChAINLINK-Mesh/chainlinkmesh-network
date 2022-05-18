@@ -27,7 +27,10 @@ struct Node {
 	    CHAINLINK_NET_PREFIX.size() * 8;
 
 	using IDRangeGenerator = std::uniform_int_distribution<std::uint64_t>;
-	static IDRangeGenerator generate_id_range();
+	[[nodiscard]] static IDRangeGenerator generate_id_range();
+
+	[[nodiscard]] static std::uint64_t
+	generate_id(std::default_random_engine engine = {});
 
 	/**
 	 * @brief Converts an ID into a corresponding control-plane IP address using a
@@ -36,7 +39,8 @@ struct Node {
 	 * @param nodeID The ID of the node to get an IP for.
 	 * @return The control-plane address of the node being looked up.
 	 */
-	static Poco::Net::IPAddress get_control_plane_ip(std::uint64_t nodeID);
+	[[nodiscard]] static Poco::Net::IPAddress
+	get_control_plane_ip(std::uint64_t nodeID);
 };
 
 struct SelfNode : public Node {

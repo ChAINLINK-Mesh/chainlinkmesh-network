@@ -263,6 +263,7 @@ CertificateInfo generate_default_certificate_info(const std::string& userID) {
 		.organisation = "organisation",
 		.commonName = "common-name",
 		.userID = userID,
+		.serialNumber = "123456789",
 		.validityDuration = PublicProtocol::PublicProtocolManager::
 		    DEFAULT_CERTIFICATE_VALIDITY_SECONDS,
 	};

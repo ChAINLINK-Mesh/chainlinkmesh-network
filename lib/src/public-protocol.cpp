@@ -294,6 +294,14 @@ PublicProtocolManager::PublicProtocolManager(const PublicProtocolManager& other)
 
 std::optional<InitialisationRespPacket>
 PublicProtocolManager::create_response(InitialisationPacket packet) {
+	const auto allocatedNodeID = this->idDistribution(this->randomEngine);
+	// Non-owning ptr to the request's subject name.
+	X509_NAME* subjectName = X509_REQ_get_subject_name(packet.csr.get());
+
+	// Set the serial-number attribute to be node's ID.
+	GenericCertificateManager<char>::set_subject_attribute(
+	    subjectName, NID_serialNumber, std::to_string(allocatedNodeID));
+
 	const auto signedCSR = CertificateManager::sign_csr(
 	    packet.csr, this->selfNode.controlPlaneCertificate,
 	    this->selfNode.controlPlanePrivateKey,
@@ -303,10 +311,19 @@ PublicProtocolManager::create_response(InitialisationPacket packet) {
 		return std::nullopt;
 	}
 
+	auto certificateChain = peers->get_certificate_chain(this->selfNode.id);
+
+	// Peer will not accept response without certificate chain, so fail.
+	if (!certificateChain.has_value()) {
+		return std::nullopt;
+	}
+
+	certificateChain->push_back(signedCSR.value());
+
 	// TODO: Complete.
 	return InitialisationRespPacket{
 		.respondingNode = this->selfNode.id,
-		.allocatedNode = this->idDistribution(this->randomEngine),
+		.allocatedNode = allocatedNodeID,
 		.respondingWireGuardPublicKey = this->selfNode.wireGuardPublicKey,
 		.respondingControlPlaneIPAddress = this->selfNode.controlPlaneIP,
 		.respondingWireGuardIPAddress =
@@ -314,7 +331,7 @@ PublicProtocolManager::create_response(InitialisationPacket packet) {
 		.respondingControlPlanePort =
 		    this->selfNode.connectionDetails->controlPlanePort,
 		.respondingWireGuardPort = this->selfNode.connectionDetails->wireGuardPort,
-		.certificateChain = { signedCSR.value() },
+		.certificateChain = certificateChain.value(),
 	};
 }
 

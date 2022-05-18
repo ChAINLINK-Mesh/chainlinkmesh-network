@@ -302,6 +302,8 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 				return;
 			}
 
+			id = Node::generate_id();
+
 			if (auto tempCertificate = CertificateManager::generate_certificate(
 			        CertificateInfo{
 			            .country = config().getString(
@@ -317,6 +319,7 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 			                "common-name",
 			                std::string{ DEFAULT_CERT_INFO.commonName }),
 			            .userID = userID.value(),
+			            .serialNumber = std::to_string(id.value()),
 			            .validityDuration = config().getUInt64(
 			                "validity-duration", DEFAULT_CERT_INFO.validityDuration),
 			        },
@@ -366,6 +369,7 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 				.commonName = config().getString(
 				    "common-name", std::string{ DEFAULT_CERT_INFO.commonName }),
 				.userID = userID.value(),
+				.serialNumber = std::nullopt,
 				.validityDuration = config().getUInt64(
 				    "validity-duration", DEFAULT_CERT_INFO.validityDuration),
 			};
@@ -402,22 +406,112 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 
 			try {
 				const auto resp = client.connect();
-				// TODO: Decode the control-plane pubkey from certificate.
-				peers.push_back(Node{
-				    .id = resp.respondingNode,
-				    .controlPlanePublicKey = {},
-				    .wireGuardPublicKey = resp.respondingWireGuardPublicKey,
-				    .controlPlaneIP = resp.respondingControlPlaneIPAddress,
-				    .connectionDetails =
-				        NodeConnection{
-				            .controlPlanePort = resp.respondingControlPlanePort,
-				            .wireGuardHost = client.get_parent_address(resp),
-				            .wireGuardPort = resp.respondingWireGuardPort,
-				        },
-				    .controlPlaneCertificate = {},
-				});
+
+				if (resp.certificateChain.size() < 2) {
+					logger().error(
+					    "Response from server didn't include own certificate\n");
+					return;
+				}
+
+				std::optional<std::uint64_t> parentID{};
+
+				for (auto certIter = resp.certificateChain.begin();
+				     certIter + 1 != resp.certificateChain.end(); certIter++) {
+					const auto& cert = *certIter;
+					const auto certPubkey =
+					    CertificateManager::get_certificate_pubkey(cert);
+
+					if (!certPubkey.has_value()) {
+						logger().error("Could not decode public key from certificate in "
+						               "response from server\n");
+						return;
+					}
+
+					const auto* const subjectName = X509_get_subject_name(cert.get());
+
+					if (subjectName == nullptr) {
+						logger().error("Could not decode the subject name of a certificate "
+						               "in response from server\n");
+						return;
+					}
+					const auto peerIDStrs = CertificateManager::get_subject_attribute(
+					    subjectName, NID_serialNumber);
+
+					if (peerIDStrs.size() != 1) {
+						logger().error("Couldn't find single peer ID in the subject name "
+						               "of a certificate in response from server\n");
+						return;
+					}
+
+					std::uint64_t peerID = 0;
+
+					try {
+						peerID = std::stoull(peerIDStrs[0]);
+					} catch (std::invalid_argument& /* ignored */) {
+						logger().error("Couldn't decode peer ID from certificate in "
+						               "repsonse from server");
+						return;
+					} catch (std::out_of_range& /* ignored */) {
+						logger().error("Couldn't decode peer ID from certificate in "
+						               "repsonse from server");
+						return;
+					}
+
+					const auto wireguardPublicKeyStrs =
+					    CertificateManager::get_subject_attribute(subjectName,
+					                                              NID_userId);
+
+					if (wireguardPublicKeyStrs.size() != 1) {
+						logger().error(
+						    "Couldn't find single WireGuard public key in the subject name "
+						    "of a certificate in response from server\n");
+						return;
+					}
+
+					const auto wireguardPublicKeyStr =
+					    base64_decode(wireguardPublicKeyStrs[0]);
+
+					if (!wireguardPublicKeyStr.has_value() ||
+					    wireguardPublicKeyStr->size() !=
+					        AbstractWireGuardManager::WG_KEY_SIZE) {
+						logger().error(
+						    "Couldn't find a valid WireGuard public key in the subject "
+						    "name of a certificate in response from server\n");
+						return;
+					}
+
+					AbstractWireGuardManager::Key wireguardPublicKey{};
+					std::copy(wireguardPublicKeyStr->begin(),
+					          wireguardPublicKeyStr->end(), wireguardPublicKey.begin());
+
+					const auto controlPlaneIP = Node::get_control_plane_ip(peerID);
+
+					Node peer{
+						.id = peerID,
+						.controlPlanePublicKey = certPubkey.value(),
+						.wireGuardPublicKey = wireguardPublicKey,
+						.controlPlaneIP = controlPlaneIP,
+						.connectionDetails = std::nullopt,
+						.controlPlaneCertificate = cert,
+						.parent = parentID,
+					};
+
+					// If this is the direct parent peer, then set its connection details.
+					if (peerID == resp.respondingNode) {
+						peer.connectionDetails = NodeConnection{
+							.controlPlanePort = resp.respondingControlPlanePort,
+							.wireGuardHost = client.get_parent_address(resp),
+							.wireGuardPort = resp.respondingWireGuardPort,
+						};
+					}
+					peers.push_back(peer);
+
+					// Update next peers's parent to be the current peer ID
+					parentID = peerID;
+				}
 				id = resp.allocatedNode;
 				parent = resp.respondingNode;
+				certificate = resp.certificateChain.back();
 			} catch (const std::invalid_argument& e) {
 				logger().fatal(std::string{ "Invalid argument: " } + e.what() + "\n");
 				return;
@@ -471,7 +565,9 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 			.controlPlaneCertificate = certificate,
 			.psk = psk.value(),
 			.pskTTL = pskTTL,
+			.clock = std::nullopt,
 			.peers = peers,
+			.randomEngine = std::nullopt,
 		};
 	}
 
@@ -566,6 +662,8 @@ const CertificateInfo ServerDaemon::DEFAULT_CERT_INFO = {
 	.city = "Test City",
 	.organisation = "Test Organisation",
 	.commonName = "Test Common Name",
+	.userID = "",
+	.serialNumber = std::nullopt,
 	.validityDuration = PublicProtocol::PublicProtocolManager::
 	    DEFAULT_CERTIFICATE_VALIDITY_SECONDS,
 };

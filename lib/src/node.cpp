@@ -15,6 +15,11 @@ Node::IDRangeGenerator Node::generate_id_range() {
 		                             std::numeric_limits<std::uint64_t>::max() };
 }
 
+std::uint64_t Node::generate_id(std::default_random_engine engine) {
+	auto idRange = Node::generate_id_range();
+	return idRange(engine);
+}
+
 Poco::Net::IPAddress Node::get_control_plane_ip(const std::uint64_t nodeID) {
 	const auto beNodeID = Poco::ByteOrder::toBigEndian(nodeID);
 	const auto* const idBytes = reinterpret_cast<const std::uint8_t*>(&beNodeID);

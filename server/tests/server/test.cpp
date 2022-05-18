@@ -25,8 +25,11 @@ struct ConnectionDetails {
 Server::Configuration get_config(std::uint64_t id, const TestPorts& testPorts);
 Server::Configuration get_child_config(const TestPorts& testPorts,
                                        const ConnectionDetails& parentDetails);
-CertificateInfo generate_default_certificate_info(const std::string& userID);
-X509_RAII generate_default_certificate(const std::string& userID,
+CertificateInfo
+generate_default_certificate_info(std::optional<std::uint64_t> nodeID,
+                                  const std::string& userID);
+X509_RAII generate_default_certificate(std::uint64_t nodeID,
+                                       const std::string& wireguardPublicKey,
                                        const EVP_PKEY_RAII& privateKey);
 
 void test() {
@@ -50,6 +53,7 @@ void test() {
 	auto childServer =
 	    get_server(get_child_config(get_test_ports(), parentDetails));
 	childServer.start();
+	// TODO: Convert this static sleep into a wait for an actual connection.
 	std::this_thread::sleep_for(std::chrono::seconds{ 2 });
 	childServer.stop();
 	rootServer.stop();
@@ -76,7 +80,7 @@ Server::Configuration get_config(const std::uint64_t id,
 	assert(userID);
 
 	const auto certificate =
-	    generate_default_certificate(userID.value(), privateKey.value());
+	    generate_default_certificate(id, userID.value(), privateKey.value());
 
 	return Server::Configuration{
 		.id = id,
@@ -117,7 +121,7 @@ Server::Configuration get_child_config(const TestPorts& testPorts,
 	assert(userID);
 
 	const auto childCertificateInfo =
-	    generate_default_certificate_info(userID.value());
+	    generate_default_certificate_info(std::nullopt, userID.value());
 
 	PublicProtocol::PublicProtocolClient client{
 		PublicProtocol::PublicProtocolClient::Configuration{
@@ -162,7 +166,15 @@ Server::Configuration get_child_config(const TestPorts& testPorts,
 	};
 }
 
-CertificateInfo generate_default_certificate_info(const std::string& userID) {
+CertificateInfo
+generate_default_certificate_info(std::optional<std::uint64_t> nodeID,
+                                  const std::string& userID) {
+	std::optional<std::string> serialNumber{};
+
+	if (nodeID.has_value()) {
+		serialNumber = std::to_string(nodeID.value());
+	}
+
 	return CertificateInfo{
 		.country = "UK",
 		.province = "province",
@@ -170,16 +182,19 @@ CertificateInfo generate_default_certificate_info(const std::string& userID) {
 		.organisation = "organisation",
 		.commonName = "common-name",
 		.userID = userID,
+		.serialNumber = serialNumber,
 		.validityDuration = PublicProtocol::PublicProtocolManager::
 		    DEFAULT_CERTIFICATE_VALIDITY_SECONDS,
 	};
 }
 
 X509_RAII
-generate_default_certificate(const std::string& userID,
+generate_default_certificate(const std::uint64_t nodeID,
+                             const std::string& wireguardPublicKey,
                              const EVP_PKEY_RAII& privateKey) {
 	auto certificate = CertificateManager::generate_certificate(
-	    generate_default_certificate_info(userID), privateKey);
+	    generate_default_certificate_info(nodeID, wireguardPublicKey),
+	    privateKey);
 
 	assert(certificate);
 	return certificate.value();

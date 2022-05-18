@@ -383,7 +383,9 @@ Expected<Server::Configuration> Server::get_configuration_from_saved_config(
 			.controlPlaneCertificate = controlPlaneCertificate.value(),
 			.psk = psk.value(),
 			.pskTTL = pskTTL,
+			.clock = std::nullopt,
 			.peers = peers,
+			.randomEngine = std::nullopt,
 		};
 
 		std::copy(meshPublicKey.value().begin(), meshPublicKey.value().end(),
@@ -485,6 +487,7 @@ bool Server::add_node(const Node& node) {
 	    .endpoint = std::nullopt,
 	    // Poco::Net::SocketAddress{ node.wireGuardIP, node.wireGuardPort },
 	    .internalAddress = Node::get_control_plane_ip(node.id),
+	    .keepalive_interval = AbstractWireGuardManager::KEEPALIVE_INTERVAL,
 	});
 
 	return true;

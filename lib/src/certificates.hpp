@@ -21,6 +21,14 @@ struct Certificate {
 struct CertificateInfo {
 	// Encoded in UTF-8 format.
 	std::string country, province, city, organisation, commonName, userID;
+
+	/**
+	 * @serialNumber The ID of the node, encoded as a UTF-8 string.
+	 *
+	 *               Should be set for Certificates, but not for
+	 *               Certificate-Signing Requests.
+	 */
+	std::optional<std::string> serialNumber;
 	std::uint64_t validityDuration;
 };
 
@@ -111,6 +119,20 @@ public:
 	 */
 	[[nodiscard]] static std::vector<std::string>
 	get_subject_attribute(const X509_NAME* subject, int nid);
+
+	/**
+	 * @brief Sets an attribute's value for an X509 subject name.
+	 *
+	 *        Will create new name entries if this NID has not been previously
+	 * set.
+	 *
+	 * @param subject The subject name.
+	 * @param nid The ID of the attribute to modify.
+	 * @param attributeValue The UTF-8 encoded value to set this attribute to.
+	 * @return Whether the operation was a success.
+	 */
+	static bool set_subject_attribute(X509_NAME* subject, int nid,
+	                                  const EncodingStringView& attributeValue);
 
 	/**
 	 * @brief Encodes an X509 certificate to PEM format.

@@ -275,7 +275,7 @@ wg_device* LinuxWireGuardManager::clone_wg_device(wg_device* device) {
 					            sizeof(newAllowedIP->ip4));
 					break;
 				case AF_INET6:
-					std::memcpy(&newAllowedIP->ip6, &newAllowedIP->ip6,
+					std::memcpy(&newAllowedIP->ip6, &allowedIP->ip6,
 					            sizeof(newAllowedIP->ip6));
 					break;
 				default:

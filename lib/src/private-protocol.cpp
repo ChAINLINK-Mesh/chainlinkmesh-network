@@ -96,12 +96,14 @@ namespace PrivateProtocol {
 
 		// If we have connection details for the new peer.
 		if (newPeer.connectionDetails) {
+			PeerConnectionDetailsT connectionDetails{};
+			connectionDetails.wireguard_address =
+			    static_cast<std::string>(newPeer.connectionDetails->wireGuardHost);
+			connectionDetails.private_proto_port =
+			    newPeer.connectionDetails->controlPlanePort;
 			peerInformCommand.connection_details =
-			    std::make_unique<PeerConnectionDetailsT>(PeerConnectionDetailsT{
-			        .wireguard_address = static_cast<std::string>(
-			            newPeer.connectionDetails->wireGuardHost),
-			        .private_proto_port = newPeer.connectionDetails->controlPlanePort,
-			    });
+			    std::make_unique<PeerConnectionDetailsT>(
+			        std::move(connectionDetails));
 		}
 
 		PrivateProtocol::CommandUnion command{};
@@ -120,9 +122,10 @@ namespace PrivateProtocol {
 			return;
 		}
 
-		MessageT message{ .originator = selfNode.id,
-			                .command = command,
-			                .signature = signature.value() };
+		MessageT message{};
+		message.originator = selfNode.id;
+		message.command = command;
+		message.signature = signature.value();
 
 		PrivateProtocolClient{ node }.send_message(message);
 	}
@@ -180,9 +183,9 @@ namespace PrivateProtocol {
 	}
 
 	void PrivateConnection::send_error(const std::string& errorMsg) {
-		ErrorCommandT errorCommand{
-			.error = errorMsg,
-		};
+		ErrorCommandT errorCommand{};
+		errorCommand.error = errorMsg;
+
 		flatbuffers::FlatBufferBuilder fbb{};
 		fbb.Finish(PrivateProtocol::ErrorCommand::Pack(fbb, &errorCommand));
 		const auto fbbBuffer = fbb.GetBufferSpan();
@@ -198,11 +201,10 @@ namespace PrivateProtocol {
 
 		PrivateProtocol::CommandUnion command{};
 		command.Set(errorCommand);
-		MessageT message{
-			.originator = parent.selfNode.id,
-			.command = command,
-			.signature = signature.value(),
-		};
+		MessageT message{};
+		message.originator = parent.selfNode.id;
+		message.command = command;
+		message.signature = signature.value();
 
 		PrivateProtocolClient::send_message_nowait(socket(), message);
 	}
@@ -272,6 +274,7 @@ namespace PrivateProtocol {
 		    .wireGuardPublicKey = wireGuardPublicKey,
 		    .controlPlaneIP = peerControlPlaneIP,
 		    .connectionDetails = nodeConnection,
+		    .controlPlaneCertificate = peerCertificate,
 		    .parent = peerInform->parent,
 		});
 	}
