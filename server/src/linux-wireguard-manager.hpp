@@ -12,7 +12,7 @@ extern "C" {
 
 class LinuxWireGuardManager : public AbstractWireGuardManager {
 public:
-	LinuxWireGuardManager(const Node& self, const std::vector<Node>& nodes,
+	LinuxWireGuardManager(const Node& self,
 	                      const AbstractWireGuardManager::Key& privateKey,
 	                      std::default_random_engine randomEngine);
 	LinuxWireGuardManager(const LinuxWireGuardManager& other) = default;
@@ -25,8 +25,9 @@ public:
 	 * @brief Sets up the WireGuard network interface by communicating with the
 	 * kernel.
 	 *
+	 * @param nodes The registered peer nodes in the network.
 	 */
-	void setup_interface() override;
+	void setup_interface(const std::vector<Node>& nodes) override;
 
 	/**
 	 * @brief Adds a peer to the WireGuard network interface.

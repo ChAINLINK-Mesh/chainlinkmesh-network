@@ -197,7 +197,6 @@ PublicProtocolManager::decode_packet(BufferType& buffer) const {
 				return std::nullopt;
 			}
 
-			std::clog << "Subject name: " << commonNames[0] << "\n";
 		} else {
 			std::cerr << "Initialisation request's CSR could not be decoded\n";
 			return std::nullopt;
@@ -694,13 +693,6 @@ InitialisationRespPacket PublicProtocolClient::connect() {
 	if (response->respondingWireGuardIPAddress.prefixLength() == 0) {
 		response->respondingWireGuardIPAddress = parentAddress;
 	}
-
-	std::cerr << "Received response from parent server ("
-	          << response->respondingNode << "), allocated node "
-	          << response->allocatedNode << ".\n"
-	          << "Parent's dataplane IP is "
-	          << response->respondingWireGuardIPAddress.toString() << ":"
-	          << response->respondingWireGuardPort << "\n";
 
 	return response.value();
 

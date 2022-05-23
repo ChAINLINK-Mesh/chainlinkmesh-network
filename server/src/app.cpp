@@ -192,7 +192,6 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 		          wgPublicKey.begin());
 	}
 
-	// TODO: load private key
 	const auto privateKey{ CertificateManager::generate_rsa_key() };
 
 	if (!privateKey) {
@@ -522,6 +521,8 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 				id = resp.allocatedNode;
 				parent = resp.respondingNode;
 				certificate = resp.certificateChain.back();
+				logger().information("Connected to server");
+				logger().information("Node ID: " + std::to_string(resp.allocatedNode));
 			} catch (const std::invalid_argument& e) {
 				logger().fatal(std::string{ "Invalid argument: " } + e.what() + "\n");
 				return;
@@ -535,7 +536,6 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 
 		if (config().hasOption("public-address")) {
 			const auto controlPlaneAddressStr = config().getString("public-address");
-			std::cerr << "Using address: " << controlPlaneAddressStr << "\n";
 
 			try {
 				publicAddress = Poco::Net::SocketAddress{ controlPlaneAddressStr };

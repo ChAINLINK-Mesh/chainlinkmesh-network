@@ -4,6 +4,7 @@
 #include "linux-wireguard-manager.hpp"
 #include "node.hpp"
 #include "private-protocol.hpp"
+#include "private-protocol_generated.h"
 #include "public-protocol.hpp"
 #include "types.hpp"
 #include "wireguard.hpp"
@@ -70,7 +71,7 @@ Server::Server(const Server::Configuration& config)
     : idRange{ Node::generate_id_range() },
       randomEngine{ config.randomEngine.value_or(
 	        std::default_random_engine{ std::random_device{}() }) },
-      self{ this->get_self(config) }, wgManager{ this->self, config.peers,
+      self{ this->get_self(config) }, wgManager{ this->self,
 	                                               config.meshPrivateKey,
 	                                               randomEngine },
       peers{ std::make_shared<LinuxPeers>(config.peers, wgManager) },
@@ -92,22 +93,13 @@ Server::Server(const Server::Configuration& config)
 	        .peers = peers,
 	        .privateProtocolManager = privateProtoManager,
 	        .randomEngine = randomEngine,
-	    } } {}
+	    } } {
+	peers->update_peer(self);
+}
 
 void Server::start() {
 	// Semantics unclear for repeated starts.
 	assert(!execution.has_value());
-
-	wgManager.setup_interface();
-
-	execution.emplace(ServerExecution{
-	    .publicProtoServer = this->publicProtoManager.start(
-	        Poco::Net::ServerSocket{ this->publicProtoAddress },
-	        Server::public_tcp_server_params()),
-	    .privateProtoServer = this->privateProtoManager.start(
-	        Poco::Net::ServerSocket{ this->get_private_proto_address() },
-	        Server::private_tcp_server_params()),
-	});
 
 	// Announce our presence to our parent.
 	if (self.parent) {
@@ -137,7 +129,44 @@ void Server::start() {
 
 		const auto res = PrivateProtocol::PrivateProtocolClient{ parent.value() }
 		                     .inform_about_new_peer(self, ourPeerDetails);
+
+		if (std::holds_alternative<std::exception_ptr>(res)) {
+			std::rethrow_exception(std::get<std::exception_ptr>(res));
+		}
+
+		const auto resMsg = std::get<PrivateProtocol::MessageT>(res);
+
+		if (resMsg.command.type == PrivateProtocol::Command_ErrorCommand) {
+			throw std::runtime_error{ "Parent reported error announcing our node: " +
+				                        resMsg.command.AsErrorCommand()->error };
+		}
+
+		if (resMsg.command.type != PrivateProtocol::Command_AckCommand) {
+			throw std::runtime_error{
+				"Unknown error occurred when announcing our node"
+			};
+		}
+
+		const auto peerList = PrivateProtocol::PrivateProtocolManager::get_peers(
+		    self, parent.value(), peers->get_peers());
+
+		if (std::holds_alternative<std::exception_ptr>(peerList)) {
+			std::rethrow_exception(std::get<std::exception_ptr>(peerList));
+		}
+
+		peers->reset_peers(std::get<std::vector<Node>>(peerList));
 	}
+
+	wgManager.setup_interface(peers->get_peers());
+
+	execution.emplace(ServerExecution{
+	    .publicProtoServer = this->publicProtoManager.start(
+	        Poco::Net::ServerSocket{ this->publicProtoAddress },
+	        Server::public_tcp_server_params()),
+	    .privateProtoServer = this->privateProtoManager.start(
+	        Poco::Net::ServerSocket{ this->get_private_proto_address() },
+	        Server::private_tcp_server_params()),
+	});
 }
 
 void Server::stop() {

@@ -57,8 +57,8 @@ bool Peers::add_peer(Node node) {
 	assert(validate_peer(node));
 	std::unique_lock<std::mutex> peersLock{ nodesMutex };
 
-	auto inserted =
-	    this->nodes.insert(std::make_pair(node.id, std::move(node))).second;
+	auto [_, inserted] =
+	    this->nodes.insert(std::make_pair(node.id, std::move(node)));
 
 	if (inserted && node.parent.has_value()) {
 		this->children[node.parent.value()].push_back(node.id);
@@ -75,6 +75,26 @@ void Peers::update_peer(Node node) {
 
 	if (inserted && node.parent.has_value()) {
 		this->children[node.parent.value()].push_back(node.id);
+	}
+}
+
+void Peers::reset_peers(const std::vector<Node>& peers) {
+	// Check all nodes are valid
+	for (const auto& node : peers) {
+		assert(validate_peer(node));
+	}
+
+	std::unique_lock<std::mutex> peersLock{ nodesMutex };
+
+	nodes = {};
+	children = {};
+
+	for (const auto& node : peers) {
+		auto [_, inserted] = nodes.emplace(node.id, node);
+
+		if (inserted && node.parent.has_value()) {
+			this->children[node.parent.value()].push_back(node.id);
+		}
 	}
 }
 

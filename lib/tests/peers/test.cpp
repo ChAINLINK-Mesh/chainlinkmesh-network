@@ -23,6 +23,7 @@ void create_peers();
 void get_peers();
 void add_peers();
 void delete_peers();
+void reset_peers();
 void get_certificate_chain();
 
 void test() {
@@ -30,6 +31,7 @@ void test() {
 	get_peers();
 	add_peers();
 	delete_peers();
+	reset_peers();
 	get_certificate_chain();
 }
 
@@ -104,6 +106,41 @@ void delete_peers() {
 		throw;
 	} catch (...) {
 		throw "Peers throws deleting unknown peer node";
+	}
+}
+
+void reset_peers() {
+	const auto randInitialPeer1 = get_random_peer(std::nullopt);
+	const auto randInitialPeer2 = get_random_peer(std::nullopt);
+
+	Peers peers{ std::vector{ randInitialPeer1, randInitialPeer2 } };
+
+	// Now reset peers with new peers
+	const auto randNewPeer1 = get_random_peer(std::nullopt);
+	const auto randNewPeer2 = get_random_peer(std::nullopt);
+
+	peers.reset_peers(std::vector{ randNewPeer1, randNewPeer2 });
+
+	// Check peers were reset correctly
+	const auto newPeers = peers.get_peers();
+	std::vector<std::uint64_t> newPeerIDs{};
+
+	for (const auto& peer : newPeers) {
+		newPeerIDs.push_back(peer.id);
+	}
+
+	if (std::find(newPeerIDs.begin(), newPeerIDs.end(), randInitialPeer1.id) !=
+	        newPeerIDs.end() ||
+	    std::find(newPeerIDs.begin(), newPeerIDs.end(), randInitialPeer2.id) !=
+	        newPeerIDs.end()) {
+		throw "Peers still contains old peer after reset";
+	}
+
+	if (std::find(newPeerIDs.begin(), newPeerIDs.end(), randNewPeer1.id) ==
+	        newPeerIDs.end() ||
+	    std::find(newPeerIDs.begin(), newPeerIDs.end(), randNewPeer2.id) ==
+	        newPeerIDs.end()) {
+		throw "Peers doesn't contain new peer after reset";
 	}
 }
 

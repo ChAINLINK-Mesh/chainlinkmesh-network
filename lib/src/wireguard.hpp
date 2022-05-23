@@ -7,6 +7,8 @@
 #include <array>
 #include <optional>
 
+struct Node;
+
 /**
  * @brief The abstract class representing WireGuard manager implementations.
  *
@@ -36,7 +38,7 @@ public:
 
 		/**
 		 * @endpoint The internet IP and port of the WireGuard service running on
-		 * this host.
+		 *           this host.
 		 */
 		std::optional<Poco::Net::SocketAddress> endpoint;
 
@@ -47,7 +49,7 @@ public:
 
 		/**
 		 * @keepalive_interval The number of seconds between keepalive heartbeat
-		 * messages. A value of 0 will disable keepalive.
+		 *                     messages. A value of 0 will disable keepalive.
 		 */
 		std::uint16_t keepalive_interval;
 	};
@@ -55,8 +57,9 @@ public:
 	/**
 	 * @brief Creates the WireGuard interface, connected to the current peers.
 	 *
+	 * @param nodes The registered peer nodes in the network.
 	 */
-	virtual void setup_interface() = 0;
+	virtual void setup_interface(const std::vector<Node>& nodes) = 0;
 
 	/**
 	 * @brief Adds a peer to the WireGuard network. May require tearing down the

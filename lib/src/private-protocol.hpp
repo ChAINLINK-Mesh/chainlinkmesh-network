@@ -83,6 +83,54 @@ namespace PrivateProtocol {
 		virtual void accept_peer_request(std::uint64_t originator,
 		                                 const Node& node);
 
+		/**
+		 * @brief Gets a list of peers from another node.
+		 *
+		 *        Will error:
+		 *
+		 *        * if any node IDs are duplicated
+		 *        * if any node is missing a parent
+		 *
+		 *        Doesn't guarantee that all node details are kept, for instance in
+		 *        the case a peer has been deleted from our parent.
+		 *
+		 * @param self The client's own node details.
+		 * @param other The node to request details from.
+		 * @param knownNodes The other known nodes. These details don't need to be
+		 *                   fetched again.
+		 * @return Either the list of peer nodes, or the error which occurred.
+		 */
+		static Expected<std::vector<Node>>
+		get_peers(const SelfNode& self, const Node& other,
+		          const std::vector<Node>& knownNodes);
+
+		/**
+		 * @brief Converts a node to a peer inform.
+		 *
+		 * @param peer The peer node.
+		 * @return The peer inform command.
+		 */
+		static PeerInformCommandT convert_node_to_peer_inform(const Node& peer);
+
+		/**
+		 * @brief Converts a peer-inform command to a node.
+		 *
+		 * @param command The peer-inform.
+		 * @return The node, or the error which occurred.
+		 */
+		static Expected<Node>
+		convert_peer_inform_to_node(const PeerInformCommandT& command);
+
+		/**
+		 * @brief Converts a command union to a message, by signing it.
+		 *
+		 * @param self The signing node.
+		 * @param command The command union to convert.
+		 * @return The resulting message.
+		 */
+		static std::optional<MessageT>
+		command_to_message(const SelfNode& self, const CommandUnion& command);
+
 	protected:
 		std::uint16_t controlPlanePort;
 		std::shared_ptr<Peers> peers;
@@ -128,6 +176,8 @@ namespace PrivateProtocol {
 
 		// Specific handling functions.
 		void handle_peer_inform(const PrivateProtocol::MessageT& message);
+		void handle_peer_list();
+		void handle_peer_request(const PrivateProtocol::MessageT& message);
 	};
 
 	class PrivateProtocolClient {
@@ -160,8 +210,26 @@ namespace PrivateProtocol {
 		                                         const Node& newPeer);
 
 		/**
+		 * @brief Requests the connected node to transmit all peer IDs they have.
+		 *
+		 * @param self The client's own node details.
+		 * @return The response message, or the error which occurred.
+		 */
+		Expected<MessageT> request_peer_list(const SelfNode& self);
+
+		/**
+		 * @brief Requests peer details from the connected node.
+		 *
+		 * @param self The client's own node details.
+		 * @param peerID The ID of the peer to request.
+		 * @return The response message, or the error which occurred.
+		 */
+		Expected<MessageT> request_peer(const SelfNode& self, std::uint64_t peerID);
+
+		/**
 		 * @brief Sends a message table to the peer, and receives response.
 		 *
+		 * @param self The client's own node details.
 		 * @param message The Flatbuffer message to send.
 		 * @return The response message, or the error which occurred.
 		 */

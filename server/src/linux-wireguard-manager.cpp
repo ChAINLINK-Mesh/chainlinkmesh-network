@@ -31,8 +31,7 @@ static_assert(sizeof(wg_device::public_key) ==
               "WireGuard key size doesn't fit Node details");
 
 LinuxWireGuardManager::LinuxWireGuardManager(
-    const Node& self, const std::vector<Node>& nodes,
-    const AbstractWireGuardManager::Key& privateKey,
+    const Node& self, const AbstractWireGuardManager::Key& privateKey,
     std::default_random_engine randomEngine)
     : device{ new wg_device{
 	        .name = {},
@@ -62,32 +61,6 @@ LinuxWireGuardManager::LinuxWireGuardManager(
 	            sizeof(device->public_key));
 	std::memcpy(device->private_key, privateKey.data(),
 	            sizeof(device->public_key));
-
-	wg_peer** prevPeer = nullptr;
-
-	for (const auto& node : nodes) {
-		if (node.id == selfID) {
-			continue;
-		}
-
-		auto* const peer =
-		    LinuxWireGuardManager::wg_peer_from_peer(peer_from_node(node));
-
-		if (prevPeer == nullptr) {
-			device->first_peer = peer;
-		} else {
-			*prevPeer = peer;
-		}
-
-		// Avoid erasing last peer pointer
-		if (peer->next_peer != nullptr) {
-			prevPeer = &peer->next_peer;
-		}
-	}
-
-	if (prevPeer != nullptr) {
-		device->last_peer = *prevPeer;
-	}
 }
 
 LinuxWireGuardManager::~LinuxWireGuardManager() {
@@ -107,7 +80,7 @@ LinuxWireGuardManager* LinuxWireGuardManager::clone() const {
 	return new LinuxWireGuardManager{ *this };
 }
 
-void LinuxWireGuardManager::setup_interface() {
+void LinuxWireGuardManager::setup_interface(const std::vector<Node>& nodes) {
 	// Unclear what the semantics of repeated setup_interface() calls should be.
 	assert(!interfaceUp);
 
@@ -118,6 +91,28 @@ void LinuxWireGuardManager::setup_interface() {
 		throw std::runtime_error{ "Failed to setup WG interface with error: " +
 			                        std::to_string(ret) };
 	}
+
+	// Don't override peers if some already existed.
+	wg_peer* lastPeer = device->last_peer;
+
+	for (const auto& node : nodes) {
+		if (node.id == selfID) {
+			continue;
+		}
+
+		auto* const peer =
+		    LinuxWireGuardManager::wg_peer_from_peer(peer_from_node(node));
+
+		if (lastPeer == nullptr) {
+			device->first_peer = peer;
+		} else {
+			lastPeer->next_peer = peer;
+		}
+
+		lastPeer = peer;
+	}
+
+	device->last_peer = lastPeer;
 
 	if (const auto ret = wg_set_device(device.get()); ret < 0) {
 		throw std::runtime_error{ "Failed to setup WG interface with error: " +

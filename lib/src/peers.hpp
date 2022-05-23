@@ -92,6 +92,13 @@ public:
 	virtual void update_peer(Node node);
 
 	/**
+	 * @brief Resets the list of peers to just the peers specified.
+	 *
+	 * @param peers The peer list to reset to.
+	 */
+	virtual void reset_peers(const std::vector<Node>& peers);
+
+	/**
 	 * @brief Gets a peer from a node's ID.
 	 *
 	 * @param nodeID The ID of the node to return.

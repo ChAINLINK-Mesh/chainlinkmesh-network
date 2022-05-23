@@ -15,6 +15,17 @@ table PeerInformCommand {
 	parent:uint64 = null;
 }
 
+table PeerListCommand {
+}
+
+table PeerListResponseCommand {
+	peers:[uint64];
+}
+
+table PeerRequestCommand {
+	peer_id:uint64;
+}
+
 table ErrorCommand {
 	error:string;
 }
@@ -24,6 +35,9 @@ table AckCommand {
 
 union Command {
 	PeerInformCommand,
+	PeerListCommand,
+	PeerListResponseCommand,
+	PeerRequestCommand,
 	ErrorCommand,
 	AckCommand,
 }

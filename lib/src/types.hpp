@@ -244,6 +244,20 @@ public:
 		}
 	}
 
+	OptionallyOwned& operator=(OptionallyOwned<Type>&& other) noexcept {
+		if (isOwner) {
+			delete value;
+		}
+
+		this->isOwner = other.isOwner;
+		this->value = other.value;
+
+		other.isOwner = false;
+		other.value = nullptr;
+
+		return *this;
+	}
+
 	/**
 	 * @brief Constructs an owned copy from constructor arguments.
 	 *
