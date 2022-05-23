@@ -45,7 +45,7 @@ public:
 	 * @param node The peer to add to the WireGuard network.
 	 */
 	void add_peer(const Node& node);
-	void remove_peer(const Peer& peer) override;
+	void remove_peer(const AbstractWireGuardManager::Key& peerPubkey) override;
 	void remove_peer(const Node& node);
 
 	/**
@@ -70,6 +70,8 @@ protected:
 
 	static wg_peer* wg_peer_from_peer(const Peer& peer);
 	[[nodiscard]] Peer peer_from_node(const Node& node) const;
+
+	static void free_allowedips(wg_peer& peer);
 
 	static void setup_interface(wg_device& device);
 };

@@ -95,16 +95,18 @@ void generate_certificate() {
 
 void generate_certificate_request() {
 	const auto certificateRequest =
-	    CertificateManager::generate_certificate_request({
-	        .country = "US",
-	        .province = "California",
-	        .city = "San Francisco",
-	        .organisation = "Mozilla",
-	        .commonName = "www.mozilla.org",
-	        .userID = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
-	        .serialNumber = std::nullopt,
-	        .validityDuration = 60ULL * 60ULL * 24ULL * 365ULL * 10ULL,
-	    });
+	    CertificateManager::generate_certificate_request(
+	        {
+	            .country = "US",
+	            .province = "California",
+	            .city = "San Francisco",
+	            .organisation = "Mozilla",
+	            .commonName = "www.mozilla.org",
+	            .userID = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
+	            .serialNumber = std::nullopt,
+	            .validityDuration = 60ULL * 60ULL * 24ULL * 365ULL * 10ULL,
+	        },
+	        std::nullopt);
 
 	if (!certificateRequest) {
 		throw "Failed to generate a valid certificate request";
@@ -150,32 +152,36 @@ void equality_certificate() {
 
 void equality_certificate_request() {
 	const auto certificateRequest1 =
-	    CertificateManager::generate_certificate_request({
-	        .country = "US",
-	        .province = "California",
-	        .city = "San Francisco",
-	        .organisation = "Mozilla",
-	        .commonName = "www.mozilla.org",
-	        .userID = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
-	        .serialNumber = std::nullopt,
-	        .validityDuration = 60ULL * 60ULL * 24ULL * 365ULL * 10ULL,
-	    });
+	    CertificateManager::generate_certificate_request(
+	        {
+	            .country = "US",
+	            .province = "California",
+	            .city = "San Francisco",
+	            .organisation = "Mozilla",
+	            .commonName = "www.mozilla.org",
+	            .userID = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
+	            .serialNumber = std::nullopt,
+	            .validityDuration = 60ULL * 60ULL * 24ULL * 365ULL * 10ULL,
+	        },
+	        std::nullopt);
 
 	if (certificateRequest1.value() != certificateRequest1.value()) {
 		throw "Equality check on the same value returned 'inequal'";
 	}
 
 	const auto certificateRequest2 =
-	    CertificateManager::generate_certificate_request(CertificateInfo{
-	        .country = "UK",
-	        .province = "London",
-	        .city = "London",
-	        .organisation = "Test",
-	        .commonName = "test.co.uk",
-	        .userID = "XJMrXJMrXJMrXJMrXJMrXJMrXJMrXJMrXJMrXJMrXJU=",
-	        .serialNumber = std::nullopt,
-	        .validityDuration = 60ULL * 60ULL * 24ULL * 365ULL * 10ULL,
-	    });
+	    CertificateManager::generate_certificate_request(
+	        CertificateInfo{
+	            .country = "UK",
+	            .province = "London",
+	            .city = "London",
+	            .organisation = "Test",
+	            .commonName = "test.co.uk",
+	            .userID = "XJMrXJMrXJMrXJMrXJMrXJMrXJMrXJMrXJMrXJMrXJU=",
+	            .serialNumber = std::nullopt,
+	            .validityDuration = 60ULL * 60ULL * 24ULL * 365ULL * 10ULL,
+	        },
+	        std::nullopt);
 
 	if (certificateRequest1.value() == certificateRequest2.value()) {
 		throw "Equality check on a different value returned 'equal'";

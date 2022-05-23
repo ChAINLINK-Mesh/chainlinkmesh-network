@@ -20,6 +20,7 @@
 #include <random>
 #include <stdexcept>
 #include <utility>
+#include <variant>
 
 using PrivateProtocol::PrivateProtocolManager;
 using PublicProtocol::PublicProtocolManager;
@@ -107,6 +108,36 @@ void Server::start() {
 	        Poco::Net::ServerSocket{ this->get_private_proto_address() },
 	        Server::private_tcp_server_params()),
 	});
+
+	// Announce our presence to our parent.
+	if (self.parent) {
+		const auto& wireGuardHost = self.connectionDetails->wireGuardHost;
+
+		// Assert that the host address resolves.
+		if (!wireGuardHost) {
+			throw std::runtime_error{ "Failed to resolve our host address" };
+		}
+
+		const auto wireGuardHostIP =
+		    static_cast<Poco::Net::IPAddress>(wireGuardHost);
+
+		const auto parent = peers->get_peer(self.parent.value());
+
+		if (!parent.has_value()) {
+			throw std::runtime_error{ "Failed to find parent node details" };
+		}
+
+		Node ourPeerDetails = self;
+
+		// Don't announce our connection details to our parent if we don't actually
+		// have any knowledge over our connection details.
+		if (wireGuardHostIP.isWildcard()) {
+			ourPeerDetails.connectionDetails = std::nullopt;
+		}
+
+		const auto res = PrivateProtocol::PrivateProtocolClient{ parent.value() }
+		                     .inform_about_new_peer(self, ourPeerDetails);
+	}
 }
 
 void Server::stop() {

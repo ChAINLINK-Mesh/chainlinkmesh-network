@@ -191,6 +191,15 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 		std::copy(std::begin(tempWGPublicKey), std::end(tempWGPublicKey),
 		          wgPublicKey.begin());
 	}
+
+	// TODO: load private key
+	const auto privateKey{ CertificateManager::generate_rsa_key() };
+
+	if (!privateKey) {
+		logger().fatal("Failed to generate private key\n");
+		return;
+	}
+
 	const auto userID = base64_encode(
 	    std::span<const std::uint8_t>{ wgPublicKey.data(), wgPublicKey.size() });
 
@@ -396,6 +405,7 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 			PublicProtocol::PublicProtocolClient client{
 				PublicProtocol::PublicProtocolClient::Configuration{
 				    .certInfo = certInfo,
+				    .privateKey = privateKey.value(),
 				    .parentAddress = Host{ parentAddressStr },
 				    .pskHash = pskHash,
 				    .pskSignature = pskSignature,
@@ -519,14 +529,6 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 				logger().fatal(std::string{ "Error: " } + e.what() + "\n");
 				return;
 			}
-		}
-
-		// TODO: load private key
-		const auto privateKey{ CertificateManager::generate_rsa_key() };
-
-		if (!privateKey) {
-			logger().fatal("Failed to generate private key\n");
-			return;
 		}
 
 		std::optional<Poco::Net::SocketAddress> publicAddress{};

@@ -53,16 +53,16 @@ GenericCertificateManager<Encoding>::generate_rsa_key() {
 template <std::integral Encoding>
 [[nodiscard]] std::optional<X509_RAII>
 GenericCertificateManager<Encoding>::generate_certificate(
-    const CertificateInfo& certificateInfo, const EVP_PKEY_RAII& rsaKey) {
+    const CertificateInfo& certificateInfo, const EVP_PKEY_RAII& privateKey) {
 	assert(certificateInfo.serialNumber.has_value());
 	assert(certificateInfo.validityDuration < std::numeric_limits<long>::max());
 
 	if (debug_check(static_cast<int>(KEY_LENGTH) !=
-	                EVP_PKEY_get_bits(rsaKey.get()))) {
+	                EVP_PKEY_get_bits(privateKey.get()))) {
 		return std::nullopt;
 	}
 
-	if (!rsaKey) {
+	if (!privateKey) {
 		return std::nullopt;
 	}
 
@@ -79,7 +79,7 @@ GenericCertificateManager<Encoding>::generate_certificate(
 	X509_gmtime_adj(X509_getm_notAfter(x509.get()),
 	                static_cast<long>(certificateInfo.validityDuration));
 
-	if (X509_set_pubkey(x509.get(), rsaKey.get()) != 1) {
+	if (X509_set_pubkey(x509.get(), privateKey.get()) != 1) {
 		return std::nullopt;
 	}
 
@@ -97,7 +97,7 @@ GenericCertificateManager<Encoding>::generate_certificate(
 		return std::nullopt;
 	}
 
-	if (X509_sign(x509.get(), rsaKey.get(), EVP_sha256()) == 0) {
+	if (X509_sign(x509.get(), privateKey.get(), EVP_sha256()) == 0) {
 		return std::nullopt;
 	}
 
@@ -107,21 +107,24 @@ GenericCertificateManager<Encoding>::generate_certificate(
 template <std::integral Encoding>
 [[nodiscard]] std::optional<X509_REQ_RAII>
 GenericCertificateManager<Encoding>::generate_certificate_request(
-    const CertificateInfo& certificateInfo) {
+    const CertificateInfo& certificateInfo,
+    std::optional<EVP_PKEY_RAII> privateKey) {
 	assert(!certificateInfo.serialNumber.has_value());
 	assert(certificateInfo.validityDuration < std::numeric_limits<long>::max());
 
-	// Generate RSA key
-	const auto rsaKey = generate_rsa_key();
+	if (!privateKey.has_value()) {
+		// Generate default RSA key
+		privateKey = generate_rsa_key();
+	}
 
-	if (!rsaKey) {
+	if (!privateKey.has_value()) {
 		return std::nullopt;
 	}
 
 	X509_REQ_RAII x509Req{ X509_REQ_new() };
 
 	// If we failed to initialise the X509 request representation.
-	if (!x509Req) {
+	if (x509Req == nullptr) {
 		return std::nullopt;
 	}
 
@@ -143,12 +146,12 @@ GenericCertificateManager<Encoding>::generate_certificate_request(
 	}
 
 	// Set public key of X509 request
-	if (X509_REQ_set_pubkey(x509Req.get(), rsaKey->get()) != 1) {
+	if (X509_REQ_set_pubkey(x509Req.get(), privateKey->get()) != 1) {
 		return std::nullopt;
 	}
 
 	// Set the sign key of X509 request
-	if (X509_REQ_sign(x509Req.get(), rsaKey->get(), EVP_sha1()) <= 0) {
+	if (X509_REQ_sign(x509Req.get(), privateKey->get(), EVP_sha1()) <= 0) {
 		return std::nullopt;
 	}
 
@@ -375,6 +378,21 @@ GenericCertificateManager<Encoding>::get_certificate_pubkey(
 }
 
 template <std::integral Encoding>
+std::optional<EVP_PKEY_RAII>
+GenericCertificateManager<Encoding>::get_csr_pubkey(
+    const X509_REQ_RAII& certificate) {
+	assert(certificate != nullptr);
+
+	EVP_PKEY_RAII pubkey{ X509_REQ_get_pubkey(certificate.get()) };
+
+	if (pubkey == nullptr) {
+		return std::nullopt;
+	}
+
+	return pubkey;
+}
+
+template <std::integral Encoding>
 typename GenericCertificateManager<Encoding>::EncodingString
 GenericCertificateManager<Encoding>::encode_pem(const X509_RAII& x509) {
 	assert(x509 != nullptr);
@@ -453,7 +471,7 @@ GenericCertificateManager<Encoding>::encode_pem(const EVP_PKEY_RAII& pkey) {
 
 template <std::integral Encoding>
 std::optional<X509_RAII> GenericCertificateManager<Encoding>::sign_csr(
-    X509_REQ_RAII& req, const X509_RAII& caCert, const EVP_PKEY_RAII& key,
+    const X509_REQ_RAII& req, const X509_RAII& caCert, const EVP_PKEY_RAII& key,
     const std::uint64_t validityDurationSeconds) {
 	assert(validityDurationSeconds < std::numeric_limits<long>::max());
 

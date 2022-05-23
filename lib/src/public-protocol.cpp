@@ -1,6 +1,7 @@
 #include "public-protocol.hpp"
 #include "certificates.hpp"
 #include "literals.hpp"
+#include "private-protocol.hpp"
 #include "types.hpp"
 #include "utilities.hpp"
 #include "wireguard.hpp"
@@ -293,7 +294,7 @@ PublicProtocolManager::PublicProtocolManager(const PublicProtocolManager& other)
 }
 
 std::optional<InitialisationRespPacket>
-PublicProtocolManager::create_response(InitialisationPacket packet) {
+PublicProtocolManager::create_response(const InitialisationPacket& packet) {
 	const auto allocatedNodeID = this->idDistribution(this->randomEngine);
 	// Non-owning ptr to the request's subject name.
 	X509_NAME* subjectName = X509_REQ_get_subject_name(packet.csr.get());
@@ -360,8 +361,12 @@ void PublicConnection::run() {
 	}
 
 	if (auto packet = parent.decode_packet(buffer)) {
-		const auto responsePacket =
-		    parent.create_response(std::move(packet.value()));
+		const auto responsePacket = parent.create_response(packet.value());
+
+		// If we failed to build a response, fail the request.
+		if (!responsePacket) {
+			return;
+		}
 
 		assert(!responsePacket->certificateChain.empty());
 		const auto peerCertificate = responsePacket->certificateChain.back();
@@ -387,7 +392,7 @@ void PublicConnection::run() {
 		}
 
 		const auto certificatePubkey =
-		    CertificateManager::get_certificate_pubkey(peerCertificate);
+		    CertificateManager::get_csr_pubkey(packet->csr);
 
 		if (!certificatePubkey) {
 			std::cerr << "Failed to decode peer certificate's public key\n";
@@ -398,39 +403,26 @@ void PublicConnection::run() {
 		std::copy(subjectUserID.value().begin(), subjectUserID.value().end(),
 		          peerWGPubkey.begin());
 
-		// TODO: Don't just rely on the default WireGuard port, or potentially mark
-		// connection details as unknown.
 		const auto peer = Node{
 			.id = responsePacket->allocatedNode,
 			.controlPlanePublicKey = certificatePubkey.value(),
 			.wireGuardPublicKey = peerWGPubkey,
 			.controlPlaneIP =
 			    Node::get_control_plane_ip(responsePacket->allocatedNode),
-			.connectionDetails =
-			    NodeConnection{
-			        .controlPlanePort = 0,
-			        .wireGuardHost = Host{ socket().peerAddress().host() },
-			        .wireGuardPort = Node::DEFAULT_WIREGUARD_PORT,
-			    },
+			.connectionDetails = std::nullopt,
 			.controlPlaneCertificate = peerCertificate,
 			.parent = packet->referringNode,
 		};
-		// If this is a newly added peer.
-		if (parent.peers->add_peer(peer)) {
-			parent.privateProtocolManager.accept_peer_request(parent.selfNode.id,
-			                                                  peer);
-		}
 
-		if (responsePacket) {
-			const auto responsePacketBytes = responsePacket->get_bytes();
-			assert(responsePacketBytes.size() < std::numeric_limits<int>::max());
+		parent.peers->add_peer(peer);
 
-			if (socket().sendBytes(responsePacketBytes.data(),
-			                       static_cast<int>(responsePacketBytes.size())) <
-			    0) {
-				std::cerr << "Failed to send response to peer: " << strerror(errno)
-				          << "\n";
-			}
+		const auto responsePacketBytes = responsePacket->get_bytes();
+		assert(responsePacketBytes.size() < std::numeric_limits<int>::max());
+
+		if (socket().sendBytes(responsePacketBytes.data(),
+		                       static_cast<int>(responsePacketBytes.size())) < 0) {
+			std::cerr << "Failed to send response to peer: " << strerror(errno)
+			          << "\n";
 		}
 	} else {
 		std::clog << "Invalid connection request from: "
@@ -633,7 +625,9 @@ InitialisationRespPacket::decode_bytes(const ByteString& bytes) {
 }
 
 PublicProtocolClient::PublicProtocolClient(Configuration config)
-    : config{ std::move(config) } {}
+    : config{ std::move(config) } {
+	assert(this->config.privateKey != nullptr);
+}
 
 InitialisationRespPacket PublicProtocolClient::connect() {
 	const std::optional<std::uint16_t> port = config.parentAddress.port();
@@ -648,7 +642,8 @@ InitialisationRespPacket PublicProtocolClient::connect() {
 		}
 	}(config.parentAddress);
 
-	auto csr = CertificateManager::generate_certificate_request(config.certInfo);
+	auto csr = CertificateManager::generate_certificate_request(
+	    config.certInfo, config.privateKey);
 
 	if (!csr) {
 		throw std::runtime_error{ "Couldn't generate certificate signing request" };

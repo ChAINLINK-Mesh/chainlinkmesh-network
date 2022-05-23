@@ -70,9 +70,9 @@ public:
 	 * @brief Removes a peer from the WireGuard network. May require tearing down
 	 * the interface momentarily.
 	 *
-	 * @param peer The peer to remove from the network.
+	 * @param peerPubkey The public key of the peer to remove from the network.
 	 */
-	virtual void remove_peer(const Peer& peer) = 0;
+	virtual void remove_peer(const Key& peerPubkey) = 0;
 
 	/**
 	 * @brief Shutdown and delete the WireGuard interface.

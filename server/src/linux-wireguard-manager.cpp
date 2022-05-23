@@ -142,8 +142,6 @@ void LinuxWireGuardManager::setup_interface() {
 
 void LinuxWireGuardManager::add_peer(const Peer& peer) {
 	auto* const wgPeer = LinuxWireGuardManager::wg_peer_from_peer(peer);
-	[[maybe_unused]] const auto peerSocket = peer.endpoint.value();
-	// teardown_interface();
 
 	if (device->last_peer == nullptr) {
 		device->first_peer = wgPeer;
@@ -152,7 +150,6 @@ void LinuxWireGuardManager::add_peer(const Peer& peer) {
 	}
 
 	device->last_peer = wgPeer;
-	// setup_interface();
 
 	// If the interface is not up, don't try and reset its state.
 	if (!interfaceUp) {
@@ -175,12 +172,39 @@ void LinuxWireGuardManager::add_peer(const Node& node) {
 	add_peer(peer_from_node(node));
 }
 
-void LinuxWireGuardManager::remove_peer(const Peer& peer) {
-	throw std::runtime_error{ "Unimplemented method called" };
+void LinuxWireGuardManager::remove_peer(
+    const AbstractWireGuardManager::Key& peerPubkey) {
+	wg_peer* prevPeer = nullptr;
+	wg_peer* peer = nullptr;
+
+	for (peer = device->first_peer; peer != nullptr; peer = peer->next_peer) {
+		// If we find a peer with the same public key.
+		if (std::memcmp(peer->public_key, peerPubkey.data(), WG_KEY_SIZE) == 0) {
+
+			if (device->first_peer == peer) {
+				device->first_peer = peer->next_peer;
+			}
+
+			if (device->last_peer == peer) {
+				device->last_peer = prevPeer;
+			}
+
+			if (prevPeer != nullptr) {
+				prevPeer->next_peer = peer->next_peer;
+			}
+
+			free_allowedips(*peer);
+			peer->next_peer = nullptr;
+			delete peer;
+			return;
+		}
+
+		prevPeer = peer;
+	}
 }
 
 void LinuxWireGuardManager::remove_peer(const Node& node) {
-	remove_peer(peer_from_node(node));
+	remove_peer(node.wireGuardPublicKey);
 }
 
 void LinuxWireGuardManager::teardown_interface() {
@@ -313,17 +337,7 @@ wg_device* LinuxWireGuardManager::clone_wg_device(wg_device* device) {
 
 void LinuxWireGuardManager::delete_wg_device(wg_device* device) {
 	for (wg_peer* peer = device->first_peer; peer != nullptr;) {
-		// Zero out pointers to flush out memory access bugs
-		for (wg_allowedip* allowedIP = peer->first_allowedip;
-		     allowedIP != nullptr;) {
-			wg_allowedip* next = allowedIP->next_allowedip;
-			allowedIP->next_allowedip = nullptr;
-			delete allowedIP;
-			allowedIP = next;
-		}
-
-		peer->first_allowedip = nullptr;
-		peer->last_allowedip = nullptr;
+		free_allowedips(*peer);
 
 		wg_peer* next = peer->next_peer;
 		peer->next_peer = nullptr;
@@ -405,4 +419,17 @@ LinuxWireGuardManager::peer_from_node(const Node& node) const {
 		                          ? KEEPALIVE_INTERVAL
 		                          : 0_u16,
 	};
+}
+
+void LinuxWireGuardManager::free_allowedips(wg_peer& peer) {
+	// Zero out pointers to flush out memory access bugs
+	for (auto* ip = peer.first_allowedip; ip != nullptr;) {
+		auto* nextIP = ip->next_allowedip;
+		ip->next_allowedip = nullptr;
+		free(ip);
+		ip = nextIP;
+	}
+
+	peer.first_allowedip = nullptr;
+	peer.last_allowedip = nullptr;
 }

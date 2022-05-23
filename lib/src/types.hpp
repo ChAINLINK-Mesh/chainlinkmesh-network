@@ -195,3 +195,76 @@ protected:
 	std::optional<std::string> dns;
 	std::optional<std::uint16_t> portNumber;
 };
+
+/**
+ * @brief A std::unique_ptr alternative with optional ownership semantics.
+ *
+ * @tparam Type The type to wrap.
+ */
+template <typename Type>
+class OptionallyOwned {
+public:
+	/**
+	 * @brief Takes a value without ownership.
+	 *
+	 * @param value Value to represent. Must persist for lifetime of wrapper.
+	 */
+	explicit OptionallyOwned(Type& value) : isOwner{ false }, value{ &value } {}
+
+	/**
+	 * @brief Takes a value by r-value reference.
+	 *
+	 * @param value Value to represent.
+	 */
+	explicit OptionallyOwned(
+	    Type&& value) requires std::is_move_constructible_v<Type>
+	    : isOwner{ true }, value{ new Type{ std::move(value) } } {}
+
+	/**
+	 * @brief Takes ownership of a value from a std::unique_ptr wrapper.
+	 *
+	 * @param value Value to represent.
+	 */
+	explicit OptionallyOwned(std::unique_ptr<Type> value)
+	    : isOwner{ true }, value{ value.get() } {
+		value.release();
+	}
+
+	/**
+	 * @brief Takes control of an existing optionally-owned value.
+	 *
+	 * @param other The other value to take control of.
+	 */
+	OptionallyOwned(OptionallyOwned<Type>&& other) noexcept
+	    : isOwner{ other.isOwner }, value{ other.value } {}
+
+	virtual ~OptionallyOwned() {
+		if (isOwner) {
+			delete value;
+		}
+	}
+
+	/**
+	 * @brief Constructs an owned copy from constructor arguments.
+	 *
+	 * @tparam ConstructorParams The constructor parameter types.
+	 * @param params The arguments to the underlying type's constructor.
+	 */
+	template <typename... ConstructorParams>
+	static OptionallyOwned<Type> make(ConstructorParams... params) {
+		return OptionallyOwned<Type>{ std::make_unique<Type>(
+			  std::forward<ConstructorParams>(params)...) };
+	}
+
+	operator Type&() {
+		return *value;
+	}
+
+	operator const Type&() const {
+		return *value;
+	}
+
+protected:
+	bool isOwner;
+	Type* value = nullptr;
+};

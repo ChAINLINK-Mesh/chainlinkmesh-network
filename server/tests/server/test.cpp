@@ -126,6 +126,7 @@ Server::Configuration get_child_config(const TestPorts& testPorts,
 	PublicProtocol::PublicProtocolClient client{
 		PublicProtocol::PublicProtocolClient::Configuration{
 		    .certInfo = childCertificateInfo,
+		    .privateKey = privateKey.value(),
 		    .parentAddress = Host{ parentDetails.parentAddress },
 		    .pskHash = parentDetails.pskHash,
 		    .pskSignature = parentDetails.pskSignature,

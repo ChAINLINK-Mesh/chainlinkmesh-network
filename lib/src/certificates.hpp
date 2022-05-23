@@ -38,25 +38,57 @@ public:
 	using EncodingString = std::basic_string<Encoding>;
 	using EncodingStringView = std::basic_string_view<Encoding>;
 
+	/**
+	 * @brief Generates an RSA private key.
+	 *
+	 * @return Either the private key, or std::nullopt if an error occurred.
+	 */
 	[[nodiscard]] static std::optional<EVP_PKEY_RAII> generate_rsa_key();
 
-	// Generates a X509v3 certificate
+	/**
+	 * @brief Generates an X509 certificate from the given certificate details
+	 *        and private key.
+	 *
+	 * @param certificateInfo The certificate's details.
+	 * @param privateKey The private key to sign the signature with.
+	 * @return Either the certificate, or std::nullopt if an error occurred.
+	 */
 	[[nodiscard]] static std::optional<X509_RAII>
 	generate_certificate(const CertificateInfo& certificateInfo,
-	                     const EVP_PKEY_RAII& rsaKey);
+	                     const EVP_PKEY_RAII& privateKey);
 
-	// Generates a X509v3 certificate-signing-request
+	/**
+	 * @brief Generates an X509 certificate-signing request from the given
+	 *        certificate details.
+	 *
+	 * @param certificateInfo The CSR's details.
+	 * @param privateKey The private key to sign the CSR with. A value of
+	 *                   std::nullopt will generate a default private key.
+	 * @return Either the CSR, or std::nullopt if an error occurred.
+	 */
 	[[nodiscard]] static std::optional<X509_REQ_RAII>
-	generate_certificate_request(const CertificateInfo& certificateInfo);
+	generate_certificate_request(const CertificateInfo& certificateInfo,
+	                             std::optional<EVP_PKEY_RAII> privateKey);
 
 	/**
 	 * @brief Gets a certificate's public key.
 	 *
 	 * @param certificate which certificate to retrieve the public key for.
-	 * @return the public key of the given certificate
+	 * @return The public key of the given certificate, or std::nullopt if an
+	 *         error occurred.
 	 */
 	[[nodiscard]] static std::optional<EVP_PKEY_RAII>
 	get_certificate_pubkey(const X509_RAII& certificate);
+
+	/**
+	 * @brief Gets a certificate-signing-request's public key.
+	 *
+	 * @param csr Certificate-signing-request to retrieve the public key for.
+	 * @return The public key of the given CSR, or std::nullopt if an error
+	 *         occurred.
+	 */
+	[[nodiscard]] static std::optional<EVP_PKEY_RAII>
+	get_csr_pubkey(const X509_REQ_RAII& csr);
 
 	/**
 	 * @brief Decodes the given PEM bytes into a certificate.
@@ -180,7 +212,7 @@ public:
 	 *         could not be signed
 	 */
 	[[nodiscard]] static std::optional<X509_RAII>
-	sign_csr(X509_REQ_RAII& req, const X509_RAII& caCert,
+	sign_csr(const X509_REQ_RAII& req, const X509_RAII& caCert,
 	         const EVP_PKEY_RAII& key, std::uint64_t validityDurationSeconds);
 
 	/**

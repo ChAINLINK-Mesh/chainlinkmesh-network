@@ -107,7 +107,7 @@ namespace PublicProtocol {
 		std::optional<InitialisationPacket> decode_packet(ByteStringView buffer);
 
 		std::optional<InitialisationRespPacket>
-		create_response(InitialisationPacket packet);
+		create_response(const InitialisationPacket& packet);
 
 		// TODO: Review this validity period.
 		static const constexpr std::uint64_t DEFAULT_CERTIFICATE_VALIDITY_SECONDS =
@@ -163,6 +163,7 @@ namespace PublicProtocol {
 	public:
 		struct Configuration {
 			CertificateInfo certInfo;
+			EVP_PKEY_RAII privateKey;
 			Host parentAddress;
 			PublicProtocol::InitialisationPacket::Hash pskHash;
 			PublicProtocol::InitialisationPacket::Signature pskSignature;

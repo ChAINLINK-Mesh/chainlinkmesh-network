@@ -14,6 +14,7 @@
 
 namespace PrivateProtocol {
 	const constexpr std::uint16_t DEFAULT_CONTROL_PLANE_PORT = 273;
+	const constexpr std::uint32_t MAX_PACKET_SIZE = 32 * 1024;
 
 	class PrivateConnection;
 
@@ -75,12 +76,11 @@ namespace PrivateProtocol {
 		 *
 		 *        Expects peer node to be valid.
 		 *
-		 * @param originator Which node sent this message. If we signed a CSR, then
-		 *                   the originator is our own ID.
-		 * @param node The node to add to our peer list.
-		 * @return Whether the peer was actually added.
+		 * @param originator Which node sent this message. If a node is advertising
+		 * itself, then the originator is its own ID.
+		 * @param node The node to add to the peer list.
 		 */
-		virtual bool accept_peer_request(std::uint64_t originator,
+		virtual void accept_peer_request(std::uint64_t originator,
 		                                 const Node& node);
 
 	protected:
@@ -142,6 +142,24 @@ namespace PrivateProtocol {
 		PrivateProtocolClient(Node peer);
 
 		/**
+		 * @brief Creates a client which re-uses an existing connection to a peer.
+		 *
+		 * @param socket The existing connection to reuse. Must persist for the
+		 *               lifetime of the client.
+		 */
+		PrivateProtocolClient(Poco::Net::StreamSocket& socket);
+
+		/**
+		 * @brief Informs the connected node about a new peer.
+		 *
+		 * @param self The client's own node details.
+		 * @param newPeer The new peer to inform the connected node about.
+		 * @return The response message, or the error which occurred.
+		 */
+		Expected<MessageT> inform_about_new_peer(const SelfNode& self,
+		                                         const Node& newPeer);
+
+		/**
 		 * @brief Sends a message table to the peer, and receives response.
 		 *
 		 * @param message The Flatbuffer message to send.
@@ -180,7 +198,7 @@ namespace PrivateProtocol {
 		                                          const MessageT& message);
 
 	protected:
-		Node peer;
+		OptionallyOwned<Poco::Net::StreamSocket> socket;
 	};
 
 	// Utility functions for working with the Flatbuffers library
