@@ -19,7 +19,7 @@ extern "C" {
 #include <openssl/x509.h>
 
 #include <memory>
-};
+}
 
 namespace PrivateProtocol {
 	PrivateProtocolManager::PrivateProtocolManager(Configuration config)
@@ -585,8 +585,8 @@ namespace PrivateProtocol {
 		assert(fbbBuffer.size_bytes() < std::numeric_limits<int>::max());
 
 		try {
-			socket.sendBytes(fbb.GetBufferSpan().data(),
-			                 static_cast<int>(fbb.GetBufferSpan().size_bytes()));
+			socket.sendBytes(fbbBuffer.data(),
+			                 static_cast<int>(fbbBuffer.size_bytes()));
 		} catch (Poco::Net::NetException& e) {
 			return std::make_exception_ptr(e);
 		}
