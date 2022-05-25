@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.12)
 
-project(wgmesh-server)
+project(chainlinkmesh-server)
 
 set(SRC_DIRECTORY src)
 set(HEADER_FILES
@@ -42,7 +42,7 @@ ExternalProject_Add(LibNL SOURCE_DIR ${NL_DIR}
 add_library("lib-${PROJECT_NAME}" STATIC ${SOURCE_FILES} ${HEADER_FILES})
 target_include_directories("lib-${PROJECT_NAME}" PUBLIC ${SRC_DIRECTORY} "${CMAKE_INSTALL_PREFIX}/include/libnl3")
 target_compile_options("lib-${PROJECT_NAME}" PRIVATE ${BASE_COMPILE_ARGS})
-target_link_libraries("lib-${PROJECT_NAME}" PUBLIC lib-wgmesh linux-wg-interface Poco::Util)
+target_link_libraries("lib-${PROJECT_NAME}" PUBLIC lib-chainlinkmesh linux-wg-interface Poco::Util)
 
 if (DEFINED ${BUILD_SHARED_LIBS} AND NOT ${BUILD_SHARED_LIBS})
     target_link_libraries("lib-${PROJECT_NAME}" PUBLIC nl-3.a nl-route-3.a)
@@ -84,7 +84,7 @@ FOREACH (subdir ${SUBDIRS})
             "${TEST_NAME}_Makefile" SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}"
             PATCH_COMMAND ""
             CONFIGURE_COMMAND ""
-            BUILD_COMMAND ${CMAKE_COMMAND} -E env PATH="${CMAKE_BINARY_DIR}:$ENV{PATH}" ${MAKE_EXECUTABLE} -C "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}"
+            BUILD_COMMAND ${MAKE_EXECUTABLE} -C "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}" PATH="${CMAKE_BINARY_DIR}:$ENV{PATH}"
             BUILD_ALWAYS true
             INSTALL_COMMAND ""
         )

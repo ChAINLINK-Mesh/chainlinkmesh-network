@@ -13,7 +13,7 @@ cmake --build .
 ## Docker
 
 ```sh
-docker build -f Dockerfile.server -t michaelkuc6/wgmesh-server .
+docker build -f Dockerfile.server -t michaelkuc6/chainlinkmesh-server .
 ```
 
 # How to Run
@@ -21,7 +21,7 @@ docker build -f Dockerfile.server -t michaelkuc6/wgmesh-server .
 ## Server
 
 ```sh
-docker run --network=host --cap-add=NET_ADMIN -it michaelkuc6/wgmesh-server
+docker run --network=host --cap-add=NET_ADMIN -it michaelkuc6/chainlink-server
 ```
 
 # Development

@@ -596,7 +596,7 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 		                     "\n");
 		logger().information(
 		    "I.e.: docker run --network=host --cap-add=NET_ADMIN -it "
-		    "michaelkuc6/wgmesh-server wgmesh-server"
+		    "michaelkuc6/chainlinkmesh-server chainlinkmesh-server"
 		    " \\\n\t--timestamp=" +
 		    std::to_string(timestamp) +
 		    " \\\n\t--psk-hash=" + b64EncodedHash.value() +

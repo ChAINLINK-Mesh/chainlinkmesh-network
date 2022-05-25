@@ -1,7 +1,7 @@
 #!/usr/bin/env -S sh -c 'printf "This file is meant to be sourced!\n" ; false'
 
 if [ -z "${SERVER_CMD}" ]; then
-	SERVER_CMD="${PWD}/server/wgmesh-server"
+	SERVER_CMD="${PWD}/server/chainlinkmesh-server"
 
 	if [ ! -x "${SERVER_CMD}" ]; then
 		printf "Could not find server executable at location %s\n" "${SERVER_CMD}" >/dev/stderr
