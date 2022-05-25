@@ -13,4 +13,5 @@ RUN cd /build && cmake --build .
 FROM debian:bookworm
 RUN apt-get update && apt-get install -y libubsan1
 COPY --from=build /build/server/chainlinkmesh-server /usr/bin/chainlinkmesh-server
+RUN mkdir /etc/chainlink
 CMD [ "/usr/bin/chainlinkmesh-server", "--psk-ttl=600" ]
