@@ -62,7 +62,7 @@ ExternalProject_Add(Protodata SOURCE_DIR ${PROTODATA_DIR}
     PATCH_COMMAND ""
     CONFIGURE_COMMAND ""
     BUILD_COMMAND ${MAKE_EXECUTABLE} -j${Ncpu} -C <SOURCE_DIR> ${_targ}
-    INSTALL_COMMAND install -m755 <SOURCE_DIR>/pd ${CMAKE_INSTALL_PREFIX}/pd
+    INSTALL_COMMAND install -m755 <SOURCE_DIR>/pd ${CMAKE_INSTALL_PREFIX}/bin/pd
     )
 
 # Add local WireGuard kernel interface as a linkable library

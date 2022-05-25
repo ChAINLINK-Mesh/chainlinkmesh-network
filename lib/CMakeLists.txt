@@ -61,7 +61,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES PUBLIC_HEADER "${HEADER_FILES}"
 target_link_directories(${PROJECT_NAME} PUBLIC ${CMAKE_INSTALL_PREFIX}/lib)
 target_link_libraries(${PROJECT_NAME} PUBLIC schema Poco::Net pthread)
 
-if (DEFINED ${BUILD_SHARED_LIBS} AND NOT ${BUILD_SHARED_LIBS})
+if (DEFINED BUILD_SHARED_LIBS AND NOT ${BUILD_SHARED_LIBS})
     target_link_libraries(${PROJECT_NAME} PUBLIC crypto.a)
     message(STATUS "Using static SSL lib")
 else ()
@@ -114,7 +114,7 @@ FOREACH (subdir ${SUBDIRS})
             "${subdir}_Makefile" SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}"
             PATCH_COMMAND ""
             CONFIGURE_COMMAND ""
-            BUILD_COMMAND ${MAKE_EXECUTABLE} -C "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}" PATH="${CMAKE_BINARY_DIR}:$ENV{PATH}"
+            BUILD_COMMAND ${MAKE_EXECUTABLE} -C "${CMAKE_CURRENT_SOURCE_DIR}/tests/${subdir}" PATH="${CMAKE_INSTALL_PREFIX}/bin:$ENV{PATH}"
             BUILD_ALWAYS true
             INSTALL_COMMAND ""
         )

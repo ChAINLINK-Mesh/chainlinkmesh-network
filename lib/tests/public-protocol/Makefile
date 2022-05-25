@@ -1,19 +1,22 @@
 TARGETS = legitimate-ca-pubkey.pem legitimate-packet.data legitimate-psk.data legitimate-psk.sha256 legitimate-psk-signature.sha256 invalid-psk.data invalid-psk-packet.data invalid-psk-signature.sha256 invalid-psk-signature-packet.data invalid-ca-key.pem unknown-referring-node.data legitimate-ca.pem legitimate-csr.csr wireguard-privkey.key wireguard-pubkey.key wireguard-pubkey.data legitimate-csr.signed.csr legitimate-response-packet.data
 
+PD = $(shell PATH=$(PATH) which pd)
+OPENSSL = $(shell PATH=$(PATH) which openssl)
+
 all: $(TARGETS)
 
 %.data: %.protodata
-	pd $< -o $@
+	$(PD) $< -o $@
 
 %-pubkey.pem: %-key.pem
-	openssl rsa -pubout -out $@ -in $<
+	$(OPENSSL) rsa -pubout -out $@ -in $<
 
 %.sha256: %.data
-	openssl dgst -sha256 -binary -out $@ $<
+	$(OPENSSL) dgst -sha256 -binary -out $@ $<
 
 %.signed.csr: %.csr legitimate-ca-key.pem
 	# Sign with a 900 day expiry
-	openssl x509 -req -days 900 -in $< -signkey legitimate-ca-key.pem -out $@
+	$(OPENSSL) x509 -req -days 900 -in $< -signkey legitimate-ca-key.pem -out $@
 
 .PHONY: clean
 
@@ -21,7 +24,7 @@ clean:
 	rm -f $(TARGETS)
 
 legitimate-psk-signature.sha256: legitimate-psk.data legitimate-ca-key.pem
-	openssl dgst -sha256 -binary -sign legitimate-ca-key.pem -out $@ < $<
+	$(OPENSSL) dgst -sha256 -binary -sign legitimate-ca-key.pem -out $@ < $<
 
 legitimate-packet.data: legitimate-packet.protodata legitimate-psk.sha256 legitimate-psk-signature.sha256 legitimate-csr.csr
 
@@ -30,13 +33,13 @@ invalid-psk.data: legitimate-psk.data
 	head -c 1 $< >> $@
 
 invalid-psk-packet.data: invalid-psk-packet.protodata invalid-psk.sha256
-	pd $< -o $@
+	$(PD) $< -o $@
 
 invalid-ca-key.pem:
-	openssl genrsa -out $@ 2048
+	$(OPENSSL) genrsa -out $@ 2048
 
 invalid-psk-signature.sha256: legitimate-psk.data invalid-ca-key.pem
-	openssl dgst -sha256 -binary -sign invalid-ca-key.pem -out $@ < $<
+	$(OPENSSL) dgst -sha256 -binary -sign invalid-ca-key.pem -out $@ < $<
 
 invalid-psk-signature-packet.data: invalid-psk-signature-packet.protodata invalid-psk-signature.sha256
 
@@ -44,10 +47,10 @@ unknown-referring-node.data: unknown-referring-node.protodata legitimate-psk.sha
 
 legitimate-ca.pem: legitimate-ca-key.pem
 	# Set a validity of 1000 days for root CA certificate
-	openssl req -x509 -nodes -key $< -out $@ -sha256 -days 1000 -subj "/C=GB/ST=Test CA State/L=Test CA City/O=Test CA Organisation/OU=Test CA Organisational Unit/CN=Test CA Common Name"
+	$(OPENSSL) req -x509 -nodes -key $< -out $@ -sha256 -days 1000 -subj "/C=GB/ST=Test CA State/L=Test CA City/O=Test CA Organisation/OU=Test CA Organisational Unit/CN=Test CA Common Name"
 
 legitimate-csr.csr: legitimate-csr-key.pem
-	openssl req -new -nodes -key $< -out $@ -subj "/C=GB/ST=Test State/L=Test City/O=Test Organisation/OU=Test Organisational Unit/CN=Test Common Name"
+	$(OPENSSL) req -new -nodes -key $< -out $@ -subj "/C=GB/ST=Test State/L=Test City/O=Test Organisation/OU=Test Organisational Unit/CN=Test Common Name"
 
 wireguard-privkey.key:
 	wg genkey > $@
