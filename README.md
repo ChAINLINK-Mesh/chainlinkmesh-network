@@ -41,9 +41,9 @@ cd build
 ctest --output-on-failure
 ```
 
-Alternatively, the command can be given the `CAP_NET_ADMIN` capability. This allows the test to correctly set up and
-tear down the WireGuard interface:
+Alternatively, the command can be given the `CAP_NET_ADMIN` and `CAP_NET_BIND_SERVICE` capability. This allows the test
+to correctly set up and tear down the WireGuard interface:
 
 ```sh
-sudo -E capsh --caps='cap_setpcap,cap_setuid,cap_setgid+ep cap_net_admin+eip' --keep=1 --user="$USER" --addamb="cap_net_admin" --shell=/usr/bin/ctest -- --output-on-failure
+sudo -E capsh --caps='cap_setpcap,cap_setuid,cap_setgid+ep cap_net_admin,cap_net_bind_service+eip' --keep=1 --user="$USER" --addamb="cap_net_admin,cap_net_bind_service" --shell=/usr/bin/ctest -- --output-on-failure
 ```

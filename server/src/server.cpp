@@ -127,6 +127,10 @@ void Server::start() {
 			ourPeerDetails.connectionDetails = std::nullopt;
 		}
 
+		// Setup interface with just our parent in order to send announcement
+		// messages.
+		wgManager.setup_interface(std::vector{ parent.value() });
+
 		const auto res = PrivateProtocol::PrivateProtocolClient{ parent.value() }
 		                     .inform_about_new_peer(self, ourPeerDetails);
 
@@ -155,6 +159,11 @@ void Server::start() {
 		}
 
 		peers->reset_peers(std::get<std::vector<Node>>(peerList));
+
+		// Tear down interface so we can set it back up again with the full list of
+		// peers.
+		wgManager.teardown_interface();
+		wgManager.remove_peer(parent.value());
 	}
 
 	wgManager.setup_interface(peers->get_peers());

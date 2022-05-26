@@ -21,7 +21,7 @@ using NL_ADDR_RAII = std::unique_ptr<nl_addr, FunctionDeleter<nl_addr_put>>;
 using RTNL_ADDR_RAII =
     std::unique_ptr<rtnl_addr, FunctionDeleter<rtnl_addr_put>>;
 
-const constexpr std::uint8_t IPV6_PREFIX_LENGTH = 128;
+const constexpr std::uint8_t IPV6_PREFIX_LENGTH = 64;
 const constexpr std::uint8_t IPV4_PREFIX_LENGTH = 32;
 
 bool NetlinkManager::add_address(const std::string& interfaceName,

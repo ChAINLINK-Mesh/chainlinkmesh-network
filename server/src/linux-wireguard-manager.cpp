@@ -119,6 +119,8 @@ void LinuxWireGuardManager::setup_interface(const std::vector<Node>& nodes) {
 			                        std::to_string(ret) };
 	}
 
+	interfaceUp = true;
+
 	// In order to set link device up, we need to interact with the kernel Netlink
 	// interface.
 	// TODO: Report actual errors.
@@ -131,8 +133,6 @@ void LinuxWireGuardManager::setup_interface(const std::vector<Node>& nodes) {
 			"Failed to activate WG interface (set link status up)"
 		};
 	}
-
-	interfaceUp = true;
 }
 
 void LinuxWireGuardManager::add_peer(const Peer& peer) {
