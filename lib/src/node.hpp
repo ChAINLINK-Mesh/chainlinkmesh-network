@@ -46,6 +46,6 @@ struct Node {
 struct SelfNode : public Node {
 	EVP_PKEY_RAII controlPlanePrivateKey;
 	AbstractWireGuardManager::Key wireGuardPrivateKey;
-	ByteString psk;
-	std::uint64_t pskTTL;
+	std::optional<ByteString> psk;
+	std::optional<std::uint64_t> pskTTL;
 };

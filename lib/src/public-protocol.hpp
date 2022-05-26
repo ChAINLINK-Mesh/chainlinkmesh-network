@@ -56,6 +56,9 @@ namespace PublicProtocol {
 		// Size: MIN_PACKET_SIZE + sizeof(csr) ~= 1704 bytes.
 		static const constexpr std::uint16_t MAX_PACKET_SIZE =
 		    MIN_PACKET_SIZE + MAX_CSR_SIZE;
+
+		static const constexpr Hash DEFAULT_HASH{};
+		static const constexpr Signature DEFAULT_SIGNATURE{};
 	};
 
 	struct InitialisationRespPacket {
@@ -113,14 +116,13 @@ namespace PublicProtocol {
 		static const constexpr std::uint64_t DEFAULT_CERTIFICATE_VALIDITY_SECONDS =
 		    900ULL * 24ULL * 60ULL * 60ULL;
 
-		ByteString get_psk() const;
+		std::optional<ByteString> get_psk() const;
 		std::optional<std::tuple<std::uint64_t, SHA256_Hash, SHA256_Signature>>
 		get_signed_psk() const;
 
 		std::vector<Node> get_peer_nodes() const;
 
 		const constexpr static std::uint64_t DEFAULT_PSK_TTL = 120;
-		static const ByteString DEFAULT_PSK;
 
 	protected:
 		const SelfNode selfNode;
@@ -165,10 +167,11 @@ namespace PublicProtocol {
 			CertificateInfo certInfo;
 			EVP_PKEY_RAII privateKey;
 			Host parentAddress;
-			PublicProtocol::InitialisationPacket::Hash pskHash;
-			PublicProtocol::InitialisationPacket::Signature pskSignature;
+			std::optional<PublicProtocol::InitialisationPacket::Hash> pskHash;
+			std::optional<PublicProtocol::InitialisationPacket::Signature>
+			    pskSignature;
 			std::uint64_t referringNode;
-			std::uint64_t timestamp;
+			std::optional<std::uint64_t> timestamp;
 		};
 
 		PublicProtocolClient(Configuration config);

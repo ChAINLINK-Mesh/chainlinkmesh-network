@@ -171,42 +171,6 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 
 	X509_RAII certificate{};
 
-	std::optional<ByteString> psk{};
-
-	if (config().hasOption("psk")) {
-		const auto pskString = config().getString("psk");
-		std::cerr << "Using PSK: " << pskString << "\n";
-		psk = ByteString{ pskString.begin(), pskString.end() };
-	}
-
-	AbstractWireGuardManager::Key wgPrivateKey;
-	AbstractWireGuardManager::Key wgPublicKey;
-	{
-		wg_key tempWGPrivateKey;
-		wg_generate_private_key(tempWGPrivateKey);
-		std::copy(std::begin(tempWGPrivateKey), std::end(tempWGPrivateKey),
-		          wgPrivateKey.begin());
-		wg_key tempWGPublicKey;
-		wg_generate_public_key(tempWGPublicKey, tempWGPrivateKey);
-		std::copy(std::begin(tempWGPublicKey), std::end(tempWGPublicKey),
-		          wgPublicKey.begin());
-	}
-
-	const auto privateKey{ CertificateManager::generate_rsa_key() };
-
-	if (!privateKey) {
-		logger().fatal("Failed to generate private key\n");
-		return;
-	}
-
-	const auto userID = base64_encode(
-	    std::span<const std::uint8_t>{ wgPublicKey.data(), wgPublicKey.size() });
-
-	if (!userID) {
-		logger().fatal("Failed to encode WireGuard key for certificate\n");
-		return;
-	}
-
 	std::vector<Node> peers{};
 	std::optional<std::uint64_t> id{};
 	std::optional<std::uint64_t> parent{};
@@ -299,6 +263,42 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 			}
 		}
 	} else {
+		AbstractWireGuardManager::Key wgPrivateKey;
+		AbstractWireGuardManager::Key wgPublicKey;
+		{
+			wg_key tempWGPrivateKey;
+			wg_generate_private_key(tempWGPrivateKey);
+			std::copy(std::begin(tempWGPrivateKey), std::end(tempWGPrivateKey),
+			          wgPrivateKey.begin());
+			wg_key tempWGPublicKey;
+			wg_generate_public_key(tempWGPublicKey, tempWGPrivateKey);
+			std::copy(std::begin(tempWGPublicKey), std::end(tempWGPublicKey),
+			          wgPublicKey.begin());
+		}
+
+		const auto privateKey{ CertificateManager::generate_rsa_key() };
+
+		if (!privateKey) {
+			logger().fatal("Failed to generate private key\n");
+			return;
+		}
+
+		const auto userID = base64_encode(std::span<const std::uint8_t>{
+		    wgPublicKey.data(), wgPublicKey.size() });
+
+		if (!userID) {
+			logger().fatal("Failed to encode WireGuard key for certificate\n");
+			return;
+		}
+
+		std::optional<ByteString> psk{};
+
+		if (config().hasOption("psk")) {
+			const auto pskString = config().getString("psk");
+			std::cerr << "Using PSK: " << pskString << "\n";
+			psk = ByteString{ pskString.begin(), pskString.end() };
+		}
+
 		if (config().hasOption("server") || !config().hasOption("client")) {
 			logger().notice("Running in root CA mode");
 
@@ -383,23 +383,34 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 			};
 
 			// TODO: Replace with parameterised clock.
-			const std::uint64_t timestamp = config().getUInt64(
-			    "timestamp", std::chrono::time_point_cast<std::chrono::seconds>(
-			                     SystemClock{}.now())
-			                     .time_since_epoch()
-			                     .count());
+			std::optional<std::uint64_t> timestamp{};
+			std::optional<PublicProtocol::InitialisationPacket::Hash> pskHash{};
+			std::optional<PublicProtocol::InitialisationPacket::Signature>
+			    pskSignature{};
 
-			const auto pskHashStr = base64_decode(config().getString("pskHash"));
-			assert(pskHashStr);
-			PublicProtocol::InitialisationPacket::Hash pskHash{};
-			std::copy(pskHashStr->begin(), pskHashStr->end(), pskHash.begin());
+			if (config().has("pskHash")) {
+				if (!config().has("signature")) {
+					logger().error(
+					    "Expected a matching signature for the provided PSK hash");
+					return;
+				}
 
-			const auto pskSignatureStr =
-			    base64_decode(config().getString("signature"));
-			assert(pskSignatureStr);
-			PublicProtocol::InitialisationPacket::Signature pskSignature{};
-			std::copy(pskSignatureStr->begin(), pskSignatureStr->end(),
-			          pskSignature.begin());
+				timestamp = config().getUInt64(
+				    "timestamp", std::chrono::time_point_cast<std::chrono::seconds>(
+				                     SystemClock{}.now())
+				                     .time_since_epoch()
+				                     .count());
+
+				const auto pskHashStr = base64_decode(config().getString("pskHash"));
+				assert(pskHashStr);
+				std::copy(pskHashStr->begin(), pskHashStr->end(), pskHash->begin());
+
+				const auto pskSignatureStr =
+				    base64_decode(config().getString("signature"));
+				assert(pskSignatureStr);
+				std::copy(pskSignatureStr->begin(), pskSignatureStr->end(),
+				          pskSignature->begin());
+			}
 
 			PublicProtocol::PublicProtocolClient client{
 				PublicProtocol::PublicProtocolClient::Configuration{
@@ -471,9 +482,9 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 					                                              NID_userId);
 
 					if (wireguardPublicKeyStrs.size() != 1) {
-						logger().error(
-						    "Couldn't find single WireGuard public key in the subject name "
-						    "of a certificate in response from server\n");
+						logger().error("Couldn't find single WireGuard public key in the "
+						               "subject name "
+						               "of a certificate in response from server\n");
 						return;
 					}
 
@@ -505,7 +516,8 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 						.parent = parentID,
 					};
 
-					// If this is the direct parent peer, then set its connection details.
+					// If this is the direct parent peer, then set its connection
+					// details.
 					if (peerID == resp.respondingNode) {
 						peer.connectionDetails = NodeConnection{
 							.controlPlanePort = resp.respondingControlPlanePort,
@@ -546,12 +558,18 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 			}
 		}
 
-		const auto pskTTL = config().getUInt64(
-		    "psk-ttl", PublicProtocol::PublicProtocolManager::DEFAULT_PSK_TTL);
-		psk = psk.value_or(PublicProtocol::PublicProtocolManager::DEFAULT_PSK);
+		std::optional<std::uint64_t> pskTTL{};
+
+		if (config().has("psk-ttl")) {
+			pskTTL = config().getUInt64("psk-ttl");
+		}
 
 		const auto privateProtocolPort = config().getUInt(
 		    "private-port", PrivateProtocol::DEFAULT_CONTROL_PLANE_PORT);
+
+		const auto wireGuardAddressStr = config().getString(
+		    "wireguard-address",
+		    "0.0.0.0:" + std::to_string(Node::DEFAULT_WIREGUARD_PORT));
 
 		configuration = Server::Configuration{
 			.id = id,
@@ -559,13 +577,11 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 			.controlPlanePrivateKey = privateKey.value(),
 			.meshPublicKey = wgPublicKey,
 			.meshPrivateKey = wgPrivateKey,
-			.wireGuardAddress = Poco::Net::SocketAddress{ config().getString(
-			    "wireguard-address",
-			    "0.0.0.0:" + std::to_string(Node::DEFAULT_WIREGUARD_PORT)) },
+			.wireGuardAddress = Poco::Net::SocketAddress{ wireGuardAddressStr },
 			.publicProtoAddress = publicAddress,
 			.privateProtoPort = privateProtocolPort,
 			.controlPlaneCertificate = certificate,
-			.psk = psk.value(),
+			.psk = psk,
 			.pskTTL = pskTTL,
 			.clock = std::nullopt,
 			.peers = peers,
@@ -582,29 +598,57 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 		const auto serverNode = server->get_self();
 		logger().information("Root server has ID: " +
 		                     std::to_string(serverNode.id));
-		const auto optSignedPSK = server->get_signed_psk();
-		assert(optSignedPSK);
-		const auto [timestamp, pskHash, pskSignature] = optSignedPSK.value();
+
 		logger().information("Connect using: \n");
-		const auto b64EncodedHash = base64_encode(pskHash);
-		assert(b64EncodedHash);
-		const auto b64EncodedSignature = base64_encode(pskSignature);
-		assert(b64EncodedSignature);
-		logger().information("\tTimestamp: " + std::to_string(timestamp));
-		logger().information("\tPSK Hash: " + b64EncodedHash.value());
-		logger().information("\tPSK Signature: " + b64EncodedSignature.value() +
-		                     "\n");
+		std::optional<std::tuple<std::uint64_t, SHA256_Hash, SHA256_Signature>>
+		    optSignedPSK{};
+		std::optional<std::string> b64EncodedHash{};
+		std::optional<std::string> b64EncodedSignature{};
+
+		if (server->get_psk().has_value()) {
+			optSignedPSK = server->get_signed_psk();
+			assert(optSignedPSK);
+			const auto& [timestamp, pskHash, pskSignature] = optSignedPSK.value();
+			b64EncodedHash = base64_encode(pskHash);
+			assert(b64EncodedHash);
+			b64EncodedSignature = base64_encode(pskSignature);
+			assert(b64EncodedSignature);
+			logger().information("\tTimestamp: " + std::to_string(timestamp));
+			logger().information("\tPSK Hash: " + b64EncodedHash.value());
+			logger().information("\tPSK Signature: " + b64EncodedSignature.value());
+		}
+
+		logger().information("\tReferrer: " + std::to_string(serverNode.id));
+		logger().information("");
 		logger().information(
 		    "I.e.: docker run --network=host --cap-add=NET_ADMIN -it "
-		    "michaelkuc6/chainlinkmesh-server chainlinkmesh-server"
-		    " \\\n\t--timestamp=" +
-		    std::to_string(timestamp) +
-		    " \\\n\t--psk-hash=" + b64EncodedHash.value() +
-		    " \\\n\t--psk-signature=" + b64EncodedSignature.value() +
-		    " \\\n\t--psk-ttl=" + std::to_string(serverNode.pskTTL) +
-		    " \\\n\t--referrer=" + std::to_string(serverNode.id) +
-		    " \\\n\t--client=" + std::string{ SERVER_IP_PLACEHOLDER } + ":" +
-		    std::to_string(server->get_public_proto_address().port()) + "\n");
+		    "michaelkuc6/chainlinkmesh-server chainlinkmesh-server \\");
+
+		if (server->get_psk().has_value()) {
+			const auto [timestamp, pskHash, pskSignature] = optSignedPSK.value();
+			logger().information(
+			    "\t--timestamp=" + std::to_string(timestamp) +
+			    " \\\n\t--psk-hash=" + b64EncodedHash.value() +
+			    " \\\n\t--psk-signature=" + b64EncodedSignature.value() + " \\");
+
+			if (serverNode.pskTTL.has_value()) {
+				logger().information(
+				    "\t--psk-ttl=" +
+				    std::to_string(serverNode.pskTTL.value_or(
+				        PublicProtocol::PublicProtocolManager::DEFAULT_PSK_TTL)) +
+				    " \\");
+			}
+		}
+
+		const auto publicProtoAddress = server->get_public_proto_address();
+		const auto serverAddress = publicProtoAddress.host().isWildcard()
+		                               ? std::string{ SERVER_IP_PLACEHOLDER }
+		                               : publicProtoAddress.host().toString();
+
+		logger().information(
+		    "\t--referrer=" + std::to_string(serverNode.id) +
+		    " \\\n\t--client=" + serverAddress + ":" +
+		    std::to_string(server->get_public_proto_address().port()));
 	}
 }
 

@@ -67,17 +67,20 @@ PublicProtocolManager::decode_packet(BufferType& buffer) const {
 			return std::nullopt;
 		}
 
-		packet.timestamp = Poco::ByteOrder::fromLittleEndian(packet.timestamp);
-		const std::uint64_t now =
-		    std::chrono::time_point_cast<std::chrono::seconds>(this->clock->now())
-		        .time_since_epoch()
-		        .count();
-		const auto pskExpiryTime = packet.timestamp + this->selfNode.pskTTL;
+		if (selfNode.psk.has_value()) {
+			packet.timestamp = Poco::ByteOrder::fromLittleEndian(packet.timestamp);
+			const std::uint64_t now =
+			    std::chrono::time_point_cast<std::chrono::seconds>(this->clock->now())
+			        .time_since_epoch()
+			        .count();
+			const auto pskExpiryTime =
+			    packet.timestamp + this->selfNode.pskTTL.value_or(DEFAULT_PSK_TTL);
 
-		if (now > pskExpiryTime || now < packet.timestamp) {
-			std::cerr << "Initialisation request had an invalid timestamp ("
-			          << packet.timestamp << ")\n";
-			return std::nullopt;
+			if (now > pskExpiryTime || now < packet.timestamp) {
+				std::cerr << "Initialisation request had an invalid timestamp ("
+				          << packet.timestamp << ")\n";
+				return std::nullopt;
+			}
 		}
 	}
 
@@ -89,31 +92,33 @@ PublicProtocolManager::decode_packet(BufferType& buffer) const {
 			return std::nullopt;
 		}
 
-		// Re-compute timestamp-PSK hash and compare
-		const auto timestampPSK =
-		    get_bytestring(packet.timestamp) +
-		    ByteString{ this->selfNode.psk.begin(), this->selfNode.psk.end() };
-		std::array<std::int8_t, EVP_MAX_MD_SIZE> timestampPSKRehash{};
-		unsigned int rehashSize = 0;
+		if (selfNode.psk.has_value()) {
+			// Re-compute timestamp-PSK hash and compare
+			const auto timestampPSK =
+			    get_bytestring(packet.timestamp) +
+			    ByteString{ this->selfNode.psk->begin(), this->selfNode.psk->end() };
+			std::array<std::int8_t, EVP_MAX_MD_SIZE> timestampPSKRehash{};
+			unsigned int rehashSize = 0;
 
-		// Failed to compute SHA-256 digest
-		if (EVP_Digest(timestampPSK.data(), timestampPSK.size(),
-		               reinterpret_cast<std::uint8_t*>(timestampPSKRehash.data()),
-		               &rehashSize, EVP_sha256(), nullptr) == 0 ||
-		    rehashSize != SHA256_DIGEST_SIZE) {
-			return std::nullopt;
+			// Failed to compute SHA-256 digest
+			if (EVP_Digest(timestampPSK.data(), timestampPSK.size(),
+			               reinterpret_cast<std::uint8_t*>(timestampPSKRehash.data()),
+			               &rehashSize, EVP_sha256(), nullptr) == 0 ||
+			    rehashSize != SHA256_DIGEST_SIZE) {
+				return std::nullopt;
+			}
+
+			// Calculated digest was incorrect. I.e. the PSK was wrong.
+			if (!std::equal(timestampPSKRehash.begin(),
+			                timestampPSKRehash.begin() + SHA256_DIGEST_SIZE,
+			                digest.begin())) {
+				std::cerr << "Initialisation request had an invalid PSK hash\n";
+				return std::nullopt;
+			}
+
+			std::copy_n(digest.data(), SHA256_DIGEST_SIZE,
+			            packet.timestampPSKHash.begin());
 		}
-
-		// Calculated digest was incorrect. I.e. the PSK was wrong.
-		if (!std::equal(timestampPSKRehash.begin(),
-		                timestampPSKRehash.begin() + SHA256_DIGEST_SIZE,
-		                digest.begin())) {
-			std::cerr << "Initialisation request had an invalid PSK hash\n";
-			return std::nullopt;
-		}
-
-		std::copy_n(digest.data(), SHA256_DIGEST_SIZE,
-		            packet.timestampPSKHash.begin());
 	}
 
 	std::optional<Node> referringNode{};
@@ -145,36 +150,38 @@ PublicProtocolManager::decode_packet(BufferType& buffer) const {
 			return std::nullopt;
 		}
 
-		// Compare timestamp-PSK signature
-		const auto timestampPSK =
-		    get_bytestring(packet.timestamp) +
-		    ByteString{ this->selfNode.psk.begin(), this->selfNode.psk.end() };
+		if (selfNode.psk.has_value()) {
+			// Compare timestamp-PSK signature
+			const auto timestampPSK =
+			    get_bytestring(packet.timestamp) +
+			    ByteString{ this->selfNode.psk->begin(), this->selfNode.psk->end() };
 
-		const auto nodePKey = referringNode->controlPlanePublicKey;
+			const auto nodePKey = referringNode->controlPlanePublicKey;
 
-		EVP_MD_CTX_RAII digestCtx{ EVP_MD_CTX_new() };
+			EVP_MD_CTX_RAII digestCtx{ EVP_MD_CTX_new() };
 
-		if (!digestCtx) {
-			return std::nullopt;
+			if (!digestCtx) {
+				return std::nullopt;
+			}
+
+			if (EVP_DigestVerifyInit(digestCtx.get(), nullptr, EVP_sha256(), nullptr,
+			                         nodePKey.get()) != 1) {
+				return std::nullopt;
+			}
+
+			if (EVP_DigestVerify(
+			        digestCtx.get(),
+			        reinterpret_cast<const std::uint8_t*>(signature.data()),
+			        signature.size(),
+			        reinterpret_cast<const std::uint8_t*>(timestampPSK.data()),
+			        timestampPSK.size()) != 1) {
+				std::cerr << "Initialisation request has invalid signature\n";
+				return std::nullopt;
+			}
+
+			std::copy_n(signature.data(), SHA256_SIGNATURE_SIZE,
+			            packet.timestampPSKSignature.begin());
 		}
-
-		if (EVP_DigestVerifyInit(digestCtx.get(), nullptr, EVP_sha256(), nullptr,
-		                         nodePKey.get()) != 1) {
-			return std::nullopt;
-		}
-
-		if (EVP_DigestVerify(
-		        digestCtx.get(),
-		        reinterpret_cast<const std::uint8_t*>(signature.data()),
-		        signature.size(),
-		        reinterpret_cast<const std::uint8_t*>(timestampPSK.data()),
-		        timestampPSK.size()) != 1) {
-			std::cerr << "Initialisation request has invalid signature\n";
-			return std::nullopt;
-		}
-
-		std::copy_n(signature.data(), SHA256_SIGNATURE_SIZE,
-		            packet.timestampPSKSignature.begin());
 	}
 
 	{
@@ -214,18 +221,20 @@ PublicProtocolManager::decode_packet(ByteStringView buffer) {
 	return decode_packet(fifoBuffer);
 }
 
-ByteString PublicProtocolManager::get_psk() const {
+std::optional<ByteString> PublicProtocolManager::get_psk() const {
 	return this->selfNode.psk;
 }
 
 std::optional<std::tuple<std::uint64_t, SHA256_Hash, SHA256_Signature>>
 PublicProtocolManager::get_signed_psk() const {
+	assert(this->selfNode.psk.has_value());
+
 	const std::uint64_t timestamp =
 	    std::chrono::time_point_cast<std::chrono::seconds>(clock->now())
 	        .time_since_epoch()
 	        .count();
 	const auto timestampPSK =
-	    get_bytestring(timestamp) + get_bytestring(this->selfNode.psk);
+	    get_bytestring(timestamp) + get_bytestring(this->selfNode.psk.value());
 
 	std::array<std::int8_t, EVP_MAX_MD_SIZE> timestampPSKBaseHash{};
 	unsigned int rehashSize = 0;
@@ -282,8 +291,6 @@ std::vector<Node> PublicProtocolManager::get_peer_nodes() const {
 
 	return peerNodes;
 }
-
-const ByteString PublicProtocolManager::DEFAULT_PSK = "Testing Key"_uc;
 
 PublicProtocolManager::PublicProtocolManager(const PublicProtocolManager& other)
     : selfNode{ other.selfNode }, clock{ other.clock }, peers{ other.peers },
@@ -651,10 +658,12 @@ InitialisationRespPacket PublicProtocolClient::connect() {
 	// Create initialisation packet before connecting to avoid delays actually
 	// sending the data.
 	const PublicProtocol::InitialisationPacket initPacket{
-		.timestamp = config.timestamp,
-		.timestampPSKHash = config.pskHash,
+		.timestamp = config.timestamp.value_or(0),
+		.timestampPSKHash =
+		    config.pskHash.value_or(InitialisationPacket::DEFAULT_HASH),
 		.referringNode = config.referringNode,
-		.timestampPSKSignature = config.pskSignature,
+		.timestampPSKSignature =
+		    config.pskSignature.value_or(InitialisationPacket::DEFAULT_SIGNATURE),
 		.csr = std::move(csr.value()),
 	};
 

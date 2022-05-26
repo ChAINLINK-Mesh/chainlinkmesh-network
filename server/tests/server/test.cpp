@@ -1,5 +1,6 @@
 #include "test.hpp"
 #include "certificates.hpp"
+#include "literals.hpp"
 #include "node.hpp"
 #include "public-protocol.hpp"
 #include "wireguard.hpp"
@@ -92,7 +93,7 @@ Server::Configuration get_config(const std::uint64_t id,
 		.publicProtoAddress = testPorts.publicProtoAddress,
 		.privateProtoPort = testPorts.privateProtoAddress.port(),
 		.controlPlaneCertificate = certificate,
-		.psk = std::nullopt,
+		.psk = "A testing PSK"_uc,
 		.pskTTL = 100,
 		.clock = std::make_shared<TestClock>(std::chrono::seconds{ 123456789 }),
 		.peers = {},

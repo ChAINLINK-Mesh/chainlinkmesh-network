@@ -158,7 +158,7 @@ public:
 	Poco::Net::SocketAddress get_private_proto_address() const;
 	Poco::Net::SocketAddress get_wireguard_address() const;
 
-	ByteString get_psk() const;
+	std::optional<ByteString> get_psk() const;
 	std::optional<std::tuple<std::uint64_t, SHA256_Hash, SHA256_Signature>>
 	get_signed_psk() const;
 	SelfNode get_self() const;

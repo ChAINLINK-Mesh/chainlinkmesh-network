@@ -251,8 +251,8 @@ SelfNode Server::get_self(const Server::Configuration& config) {
 		},
 		config.controlPlanePrivateKey,
 		config.meshPrivateKey,
-		config.psk.value_or(PublicProtocolManager::DEFAULT_PSK),
-		config.pskTTL.value_or(PublicProtocolManager::DEFAULT_PSK_TTL),
+		config.psk,
+		config.pskTTL,
 	};
 }
 
@@ -286,8 +286,15 @@ Server::get_configuration() const {
 	configuration->setString("public-proto-address",
 	                         get_public_proto_address().toString());
 	configuration->setUInt("private-proto-port", privateProtoPort);
-	configuration->setString("psk", base64_encode(serverDetails.psk).value());
-	configuration->setUInt64("psk-ttl", serverDetails.pskTTL);
+
+	// Only save PSK details if the PSK has been specified.
+	if (serverDetails.psk.has_value()) {
+		configuration->setString("psk",
+		                         base64_encode(serverDetails.psk.value()).value());
+		configuration->setUInt64(
+		    "psk-ttl",
+		    serverDetails.pskTTL.value_or(PublicProtocolManager::DEFAULT_PSK_TTL));
+	}
 
 	if (serverDetails.parent.has_value()) {
 		configuration->setUInt64("parent", serverDetails.parent.value());
@@ -359,13 +366,18 @@ Expected<Server::Configuration> Server::get_configuration_from_saved_config(
 			};
 		}
 
-		const auto psk = base64_decode(properties->getString("psk"));
+		std::optional<ByteString> psk{};
+		std::optional<std::uint64_t> pskTTL{};
 
-		if (!psk) {
-			throw DecodingError{ "Could not decode PSK as Base64" };
+		if (properties->has("psk")) {
+			psk = base64_decode(properties->getString("psk"));
+
+			if (!psk) {
+				throw DecodingError{ "Could not decode PSK as Base64" };
+			}
+
+			pskTTL = properties->getUInt64("psk-ttl");
 		}
-
-		const auto pskTTL = properties->getUInt64("psk-ttl");
 
 		std::optional<std::uint64_t> parent{};
 
@@ -450,7 +462,7 @@ Expected<Server::Configuration> Server::get_configuration_from_saved_config(
 			.publicProtoAddress = publicProtoAddress,
 			.privateProtoPort = privateProtoPort,
 			.controlPlaneCertificate = controlPlaneCertificate.value(),
-			.psk = psk.value(),
+			.psk = psk,
 			.pskTTL = pskTTL,
 			.clock = std::nullopt,
 			.peers = peers,
@@ -527,7 +539,7 @@ Server::get_node_configuration(const Node& node) {
 	return configuration;
 }
 
-ByteString Server::get_psk() const {
+std::optional<ByteString> Server::get_psk() const {
 	return publicProtoManager.get_psk();
 }
 
