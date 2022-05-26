@@ -422,6 +422,8 @@ void PublicConnection::run() {
 
 		parent.peers->add_peer(peer);
 
+		std::clog << "Added peer #" << peer.id << "\n";
+
 		const auto responsePacketBytes = responsePacket->get_bytes();
 		assert(responsePacketBytes.size() < std::numeric_limits<int>::max());
 
