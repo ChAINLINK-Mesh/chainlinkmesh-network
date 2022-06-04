@@ -9,7 +9,6 @@
 struct NodeConnection {
 	std::uint16_t controlPlanePort;
 	Host wireGuardHost;
-	std::uint16_t wireGuardPort;
 };
 
 struct Node {

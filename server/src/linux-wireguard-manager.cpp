@@ -1,4 +1,5 @@
 #include "linux-wireguard-manager.hpp"
+#include "debug.hpp"
 #include "error.hpp"
 #include "linux-netlink.hpp"
 #include "literals.hpp"
@@ -43,7 +44,7 @@ LinuxWireGuardManager::LinuxWireGuardManager(
 	        .public_key = {},
 	        .private_key = {},
 	        .fwmark = 0,
-	        .listen_port = self.connectionDetails->wireGuardPort,
+	        .listen_port = self.connectionDetails->wireGuardHost.port(),
 	        .first_peer = nullptr,
 	        .last_peer = nullptr,
 	    } },
@@ -398,13 +399,15 @@ wg_peer* LinuxWireGuardManager::wg_peer_from_peer(const Peer& peer) {
 
 LinuxWireGuardManager::Peer
 LinuxWireGuardManager::peer_from_node(const Node& node) const {
+	if (debug_check(node.connectionDetails.has_value())) {
+		assert(node.connectionDetails->wireGuardHost);
+	}
+
 	std::optional<Poco::Net::SocketAddress> endpoint{};
 
 	if (node.connectionDetails.has_value()) {
-		endpoint = Poco::Net::SocketAddress{
-			node.connectionDetails->wireGuardHost,
-			node.connectionDetails->wireGuardPort,
-		};
+		endpoint = static_cast<Poco::Net::SocketAddress>(
+		    node.connectionDetails->wireGuardHost);
 	}
 	return Peer{
 		.publicKey = node.wireGuardPublicKey,

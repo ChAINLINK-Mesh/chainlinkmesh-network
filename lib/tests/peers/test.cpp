@@ -242,7 +242,6 @@ Node get_random_peer(std::optional<std::uint64_t> parentID) {
 		    NodeConnection{
 		        .controlPlanePort = testPorts.privateProtoAddress.port(),
 		        .wireGuardHost = Host{ testPorts.wireGuardAddress },
-		        .wireGuardPort = testPorts.wireGuardAddress.port(),
 		    },
 		.controlPlaneCertificate = certificate,
 		.parent = parentID,

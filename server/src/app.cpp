@@ -416,7 +416,7 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 				PublicProtocol::PublicProtocolClient::Configuration{
 				    .certInfo = certInfo,
 				    .privateKey = privateKey.value(),
-				    .parentAddress = Host{ parentAddressStr },
+				    .parentAddress = Host{ parentAddressStr, PublicProtocol::DEFAULT_CONTROL_PLANE_PORT },
 				    .pskHash = pskHash,
 				    .pskSignature = pskSignature,
 				    .referringNode = referringNode,
@@ -522,7 +522,6 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 						peer.connectionDetails = NodeConnection{
 							.controlPlanePort = resp.respondingControlPlanePort,
 							.wireGuardHost = client.get_parent_address(resp),
-							.wireGuardPort = resp.respondingWireGuardPort,
 						};
 					}
 					peers.push_back(peer);

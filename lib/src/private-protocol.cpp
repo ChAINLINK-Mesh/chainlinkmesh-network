@@ -248,13 +248,11 @@ namespace PrivateProtocol {
 
 		if (command.connection_details != nullptr) {
 			Host wireGuardHost =
-			    Host{ command.connection_details->wireguard_address };
+			    Host{ command.connection_details->wireguard_address, Node::DEFAULT_WIREGUARD_PORT };
 
 			nodeConnection = {
 				.controlPlanePort = command.connection_details->private_proto_port,
 				.wireGuardHost = wireGuardHost,
-				.wireGuardPort =
-				    wireGuardHost.port().value_or(Node::DEFAULT_WIREGUARD_PORT),
 			};
 		}
 

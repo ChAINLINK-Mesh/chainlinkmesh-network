@@ -159,7 +159,6 @@ Server::Configuration get_child_config(const TestPorts& testPorts,
 		        NodeConnection{
 		            .controlPlanePort = response.respondingControlPlanePort,
 		            .wireGuardHost = client.get_parent_address(response),
-		            .wireGuardPort = response.respondingWireGuardPort,
 		        },
 		    .controlPlaneCertificate = {},
 		    .parent = std::nullopt,

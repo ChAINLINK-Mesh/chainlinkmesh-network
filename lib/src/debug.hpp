@@ -1,5 +1,7 @@
 #pragma once
 
+#include "error.hpp"
+
 #ifdef NDEBUG
 #	define DEBUG_MODE false
 #else

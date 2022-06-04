@@ -337,7 +337,8 @@ PublicProtocolManager::create_response(const InitialisationPacket& packet) {
 		    this->selfNode.connectionDetails->wireGuardHost,
 		.respondingControlPlanePort =
 		    this->selfNode.connectionDetails->controlPlanePort,
-		.respondingWireGuardPort = this->selfNode.connectionDetails->wireGuardPort,
+		.respondingWireGuardPort =
+		    this->selfNode.connectionDetails->wireGuardHost.port(),
 		.certificateChain = certificateChain.value(),
 	};
 }
@@ -716,5 +717,5 @@ Host PublicProtocolClient::get_parent_address(
 		return config.parentAddress;
 	}
 
-	return Host{ response.respondingWireGuardIPAddress };
+	return Host{ response.respondingWireGuardIPAddress, response.respondingControlPlanePort };
 }

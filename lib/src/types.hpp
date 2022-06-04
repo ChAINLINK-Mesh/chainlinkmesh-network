@@ -125,15 +125,29 @@ using SHA256_Signature = std::array<std::uint8_t, SHA256_SIGNATURE_SIZE>;
 class Host {
 public:
 	/**
-	 * @brief Constructs a host from either
+	 * @brief Constructs a host from a string representing either
 	 *         * a socket address IP:Port pair,
 	 *         * an IP
 	 *         * a DNS hostname
 	 *
-	 * @param host the host identifier, which should not be empty
+	 * @param host The host identifier, which should not be empty.
+	 * @param fallbackPort The port to use if the host doesn't specify one.
 	 */
-	explicit Host(std::string host);
-	explicit Host(Poco::Net::IPAddress host) noexcept;
+	explicit Host(std::string host, std::uint16_t fallbackPort);
+
+	/**
+	 * @brief Constructs a host from an IP address and corresponding port.
+	 *
+	 * @param host The host IP address.
+	 * @param port The port.
+	 */
+	explicit Host(Poco::Net::IPAddress host, std::uint16_t port) noexcept;
+
+	/**
+	 * @brief Constructs a host from a socket address.
+	 *
+	 * @param host The host socket address.
+	 */
 	explicit Host(const Poco::Net::SocketAddress& host) noexcept;
 
 	Host(const Host& other) = default;
@@ -149,6 +163,14 @@ public:
 	 * @return The host's IP address.
 	 */
 	operator Poco::Net::IPAddress() const;
+
+	/**
+	 * @brief Resolves the given host to an socket address. Will not attempt to
+	 *        re-resolve addresses.
+	 *
+	 * @return The host's socket address (IP and port).
+	 */
+	operator Poco::Net::SocketAddress() const;
 
 	/**
 	 * @brief Resolves the given host to an IP address. Returns any exceptions
@@ -177,9 +199,12 @@ public:
 	/**
 	 * @brief Gets the port associated with this host.
 	 *
-	 * @return The associated port, or std::nullopt if no port has been provided.
+	 *        Will fallback to the previously provided fallback-port if none was
+	 * provided.
+	 *
+	 * @return The associated port.
 	 */
-	std::optional<std::uint16_t> port() const noexcept;
+	std::uint16_t port() const noexcept;
 
 protected:
 	/**
@@ -193,7 +218,7 @@ protected:
 
 	mutable std::optional<Poco::Net::IPAddress> ip;
 	std::optional<std::string> dns;
-	std::optional<std::uint16_t> portNumber;
+	std::uint16_t portNumber;
 };
 
 /**

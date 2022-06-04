@@ -108,7 +108,7 @@ void test_peers() {
 	            .toString()));
 	const auto wgAddress = propFile->getString(nodeName + ".wireguard-address");
 	const Poco::Net::IPAddress wgIP = peer.connectionDetails->wireGuardHost;
-	const auto wgPort = peer.connectionDetails->wireGuardPort;
+	const auto wgPort = peer.connectionDetails->wireGuardHost.port();
 	assert((wgAddress == Poco::Net::SocketAddress{ wgIP, wgPort }.toString()));
 	assert(propFile->getString(nodeName + ".control-plane-certificate") ==
 	       Encoder::encode_pem(peer.controlPlaneCertificate));
@@ -302,8 +302,7 @@ Node get_random_peer(std::optional<std::uint64_t> parentID) {
 		.connectionDetails =
 		    NodeConnection{
 		        .controlPlanePort = peerConfig.privateProtoPort.value(),
-		        .wireGuardHost = Host{ peerConfig.wireGuardAddress.host() },
-		        .wireGuardPort = peerConfig.privateProtoPort.value(),
+		        .wireGuardHost = Host{ peerConfig.wireGuardAddress },
 		    },
 		.controlPlaneCertificate = peerConfig.controlPlaneCertificate,
 		.parent = parentID,

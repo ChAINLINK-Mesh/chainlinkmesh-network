@@ -244,7 +244,6 @@ SelfNode Server::get_self(const Server::Configuration& config) {
 		        NodeConnection{
 		            .controlPlanePort = privateProtoPort,
 		            .wireGuardHost = Host{ config.wireGuardAddress },
-		            .wireGuardPort = config.wireGuardAddress.port(),
 		        },
 		    .controlPlaneCertificate = config.controlPlaneCertificate,
 		    .parent = config.parent,
@@ -439,8 +438,7 @@ Expected<Server::Configuration> Server::get_configuration_from_saved_config(
 				.connectionDetails =
 				    NodeConnection{
 				        .controlPlanePort = peerControlPlaneAddress.port(),
-				        .wireGuardHost = Host{ peerWireGuardAddress.host() },
-				        .wireGuardPort = peerWireGuardAddress.port(),
+				        .wireGuardHost = Host{ peerWireGuardAddress },
 				    },
 				.controlPlaneCertificate = peerControlPlaneCertificate.value(),
 				.parent = peerParent,
@@ -515,11 +513,10 @@ Server::get_node_configuration(const Node& node) {
 	if (node.connectionDetails.has_value()) {
 		// TODO: Encode the raw Host value, to avoid losing DNS lookup
 		// functionality.
-		configuration->setString(
-		    nodeName + ".wireguard-address",
-		    Poco::Net::SocketAddress{ node.connectionDetails->wireGuardHost,
-		                              node.connectionDetails->wireGuardPort }
-		        .toString());
+		configuration->setString(nodeName + ".wireguard-address",
+		                         static_cast<Poco::Net::SocketAddress>(
+		                             node.connectionDetails->wireGuardHost)
+		                             .toString());
 		nodeControlPlaneAddress =
 		    Poco::Net::SocketAddress{ node.controlPlaneIP,
 			                            node.connectionDetails->controlPlanePort };
