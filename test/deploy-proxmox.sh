@@ -61,7 +61,7 @@ function run_client_server() {
 			exit 2
 		fi
 
-		local server_connection_flags="$(run_on_container "${server_id}" ./test/testsuite.sh -c "${test}")"
+		local server_connection_flags="$(run_on_container "${server_id}" ./test/testsuite.sh -c "${server_service}")"
 
 		function cleanup_server() {
 			err=$?

@@ -14,16 +14,37 @@ export SERVER_CMD="${BUILD_DIR}/server/chainlinkmesh-server"
 source "${PROJ_DIR}/utility-scripts.sh"
 
 function run_client() {
-	instance_ip="${1}"
+	local instance_ip="${1}"
 	shift
-	printf "Executing on %s\n" "${instance_ip}" >&2
-	test_server "${instance_ip}" "${@}"
+
+	local server_ip
+	local server_port
+	for arg in "${@}"; do
+		if [[ "${arg}" =~ ^--client=(.*):(.*)$ ]]; then
+			server_ip="${BASH_REMATCH[1]}"
+			server_port="${BASH_REMATCH[2]}"
+		fi
+	done
+
+	if [ -z "${server_ip}" ] || [ -z "${server_port}" ]; then
+		printf "Failed to find server contact details" >&2
+		exit 2
+	fi
+
+	for i in {1..1000}; do
+		resp="$(head -c 1200 /dev/urandom | nc "${server_ip}" "${server_port}")"
+
+		if [ ! -z "${resp}" ]; then
+			printf "Failed test, got response\n"
+			exit 3
+		fi
+	done
+
 	exit $?
 }
 
 function run_server() {
-	instance_ip="${1}"
-	printf "Executing on %s\n" "${instance_ip}" >&2
+	local instance_ip="${1}"
 	test_server "${instance_ip}"
 	exit $?
 }

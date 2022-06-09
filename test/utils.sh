@@ -65,7 +65,6 @@ function run_test() {
 	local testname="${1}"
 	local testfile="${dir}/testsuite/${testname}.sh"
 	shift
-	printf "Running test %s with arguments %s\n" "${testname}" "${*}" >&2
 
 	if [ ! -x "${testfile}" ]; then
 		printf "Couldn't find the test called '%s'\n" "${testname}" >&2
@@ -81,7 +80,7 @@ function run_test() {
 		export PROJ_DIR="${dir}/.."
 		local ip="$(ip route get 1 | awk -F ' src ' '{ print $2 }' | awk '{ print $1 }')"
 
-		if [ -z "$1" ]; then
+		if [ -z "${1}" ]; then
 			"${testfile}" -s "${ip}"
 		else
 			"${testfile}" -c "${ip}" -- "${@}"

@@ -33,6 +33,8 @@ function strip_connection_info() {
 
 	if service_running "${test_service}"; then
 		printf "${connection_info}"
+	else
+		printf "Test '%s' died\n" "${test_service}" >&2
 	fi
 }
 
