@@ -9,7 +9,6 @@ if [ -z "${SERVER_CMD}" ]; then
 	fi
 fi
 
-
 TEST_DATA_DIR="/tmp/chainlink/"
 TEST_INSTANCE_PREFIX="instance_"
 TEST_BASE_PORT=3001
@@ -53,9 +52,31 @@ function get_instance_private_port() {
 	printf "%d" $((${instance}*3+2+${TEST_BASE_PORT}))
 }
 
+function priv-net-run() {
+	local prog="$(which ${1})"
+	local suid=""
+
+	which sudo > /dev/null 2> /dev/null && suid=(sudo -E)
+	which doas > /dev/null 2> /dev/null && suid=doas
+
+	# Use capsh if not root
+	if [ "$EUID" -ne 0 ]; then
+		if [ -z "${suid}" ]; then
+			printf "No program to get root\n" > /dev/stderr
+			return 1
+		fi
+
+		${suid} capsh --caps="cap_setpcap,cap_setuid,cap_setgid+ep cap_net_admin,cap_net_bind_service+eip" --keep=1 --user="$USER" --addamb="cap_net_admin,cap_net_bind_service" --shell="${prog}" -- ${@:2}
+	else
+		"${prog}" ${@:2}
+	fi
+}
+
 function test_server() {
 	local instance_id=$(get_next_instance_id)
 	local config_file="${TEST_DATA_DIR}/${TEST_INSTANCE_PREFIX}${instance_id}"
+	local hostname="${1:-"127.0.0.1"}"
+	shift
 
 	touch "${config_file}"
 
@@ -64,17 +85,17 @@ function test_server() {
 		function cleanup() {
 			err=$?
 			config_file=$1
-			trap - SIGINT EXIT
+			trap - SIGINT SIGTERM EXIT
 			rm -f "${config_file}"
 			exit $err
 		}
 
-		trap "cleanup ${config_file}" SIGINT EXIT
+		trap "cleanup ${config_file}" SIGINT SIGTERM EXIT
 
 		priv-net-run ${SERVER_CMD} \
 			"--config=${config_file}" \
-			"--public-address=127.0.0.1:$(get_instance_public_port ${instance_id})" \
-			"--wireguard-address=127.0.0.1:$(get_instance_wireguard_port ${instance_id})" \
+			"--public-address=${hostname}:$(get_instance_public_port ${instance_id})" \
+			"--wireguard-address=${hostname}:$(get_instance_wireguard_port ${instance_id})" \
 			"--private-port=$(get_instance_private_port ${instance_id})" "$@"
 	)
 
