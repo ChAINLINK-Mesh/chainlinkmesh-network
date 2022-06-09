@@ -247,8 +247,8 @@ namespace PrivateProtocol {
 		std::optional<NodeConnection> nodeConnection{};
 
 		if (command.connection_details != nullptr) {
-			Host wireGuardHost =
-			    Host{ command.connection_details->wireguard_address, Node::DEFAULT_WIREGUARD_PORT };
+			Host wireGuardHost = Host{ command.connection_details->wireguard_address,
+				                         Node::DEFAULT_WIREGUARD_PORT };
 
 			nodeConnection = {
 				.controlPlanePort = command.connection_details->private_proto_port,

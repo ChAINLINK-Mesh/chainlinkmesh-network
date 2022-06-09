@@ -416,7 +416,8 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 				PublicProtocol::PublicProtocolClient::Configuration{
 				    .certInfo = certInfo,
 				    .privateKey = privateKey.value(),
-				    .parentAddress = Host{ parentAddressStr, PublicProtocol::DEFAULT_CONTROL_PLANE_PORT },
+				    .parentAddress = Host{ parentAddressStr,
+				                           PublicProtocol::DEFAULT_CONTROL_PLANE_PORT },
 				    .pskHash = pskHash,
 				    .pskSignature = pskSignature,
 				    .referringNode = referringNode,

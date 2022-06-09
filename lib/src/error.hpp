@@ -18,7 +18,8 @@ template <typename SuccessType>
 using Expected = typename ExpectedWrapper<SuccessType>::type;
 
 template <typename SuccessType>
-constexpr bool successful(const std::variant<SuccessType, std::exception_ptr>& x) {
+constexpr bool
+successful(const std::variant<SuccessType, std::exception_ptr>& x) {
 	return std::holds_alternative<SuccessType>(x);
 }
 
@@ -28,7 +29,8 @@ constexpr bool successful(const std::optional<SuccessType>& x) {
 }
 
 template <typename SuccessType>
-constexpr SuccessType get_expected(const std::variant<SuccessType, std::exception_ptr>& x) {
+constexpr SuccessType
+get_expected(const std::variant<SuccessType, std::exception_ptr>& x) {
 	return std::get<SuccessType>(x);
 }
 
@@ -38,7 +40,8 @@ constexpr SuccessType get_expected(const std::optional<SuccessType>& x) {
 }
 
 template <typename SuccessType>
-constexpr SuccessType& get_expected(std::variant<SuccessType, std::exception_ptr>& x) {
+constexpr SuccessType&
+get_expected(std::variant<SuccessType, std::exception_ptr>& x) {
 	return std::get<SuccessType>(x);
 }
 

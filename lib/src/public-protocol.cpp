@@ -717,5 +717,6 @@ Host PublicProtocolClient::get_parent_address(
 		return config.parentAddress;
 	}
 
-	return Host{ response.respondingWireGuardIPAddress, response.respondingControlPlanePort };
+	return Host{ response.respondingWireGuardIPAddress,
+		           response.respondingControlPlanePort };
 }

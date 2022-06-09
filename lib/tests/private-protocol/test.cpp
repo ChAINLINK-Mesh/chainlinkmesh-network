@@ -87,7 +87,8 @@ SelfNode get_self_node() {
 		    .connectionDetails =
 		        NodeConnection{
 		            .controlPlanePort = PrivateProtocol::DEFAULT_CONTROL_PLANE_PORT,
-		            .wireGuardHost = Host{ "127.0.0.1", Node::DEFAULT_WIREGUARD_PORT },
+		            .wireGuardHost =
+		                Host{ "127.0.0.1", Node::DEFAULT_WIREGUARD_PORT },
 		        },
 		    .controlPlaneCertificate = {},
 		    .parent = std::nullopt,
