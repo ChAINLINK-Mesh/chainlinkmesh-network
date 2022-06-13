@@ -77,11 +77,28 @@ namespace PrivateProtocol {
 		 *        Expects peer node to be valid.
 		 *
 		 * @param originator Which node sent this message. If a node is advertising
-		 * itself, then the originator is its own ID.
+		 *                   itself, then the originator is its own ID.
 		 * @param node The node to add to the peer list.
 		 */
 		virtual void accept_peer_request(std::uint64_t originator,
 		                                 const Node& node);
+
+		/**
+		 * @brief Accepts a peer revocation. Will notify neighbouring peers via the
+		 *        private protocol.
+		 *
+		 *        Expects the given revoking node to be valid.
+		 *
+		 * @param originator Which node sent this message. Not necessarily the same
+		 *                   as the revokingNode which is doing the revocation.
+		 * @param peerID ID of the peer to be revoked.
+		 * @param revokingNode ID of the peer issuing a revocation.
+		 * @param signature Signature of the revocation (signed by revokingNode).
+		 */
+		virtual void accept_peer_revocation(std::uint64_t originator,
+		                                    std::uint64_t peerID,
+		                                    std::uint64_t revokingNode,
+		                                    const std::string& signature);
 
 		/**
 		 * @brief Gets a list of peers from another node.
@@ -136,16 +153,6 @@ namespace PrivateProtocol {
 		std::shared_ptr<Peers> peers;
 		SelfNode selfNode;
 
-		/**
-		 * @brief Informs an existing peer node about a new peer.
-		 *
-		 *        Requires the existing peer node's connection details to be known.
-		 *
-		 * @param node The existing peer's details.
-		 * @param newPeer The new peer's details.
-		 */
-		void inform_node_about_new_peer(const Node& node, const Node& newPeer);
-
 		class ConnectionFactory : public Poco::Net::TCPServerConnectionFactory {
 		public:
 			ConnectionFactory(PrivateProtocolManager& parent);
@@ -173,11 +180,13 @@ namespace PrivateProtocol {
 		PrivateProtocolManager& parent;
 
 		void send_error(const std::string& errorMsg);
+		void send_ack();
 
 		// Specific handling functions.
 		void handle_peer_inform(const PrivateProtocol::MessageT& message);
 		void handle_peer_list();
 		void handle_peer_request(const PrivateProtocol::MessageT& message);
+		void handle_peer_revocation(const PrivateProtocol::MessageT& message);
 	};
 
 	class PrivateProtocolClient {
@@ -225,6 +234,18 @@ namespace PrivateProtocol {
 		 * @return The response message, or the error which occurred.
 		 */
 		Expected<MessageT> request_peer(const SelfNode& self, std::uint64_t peerID);
+
+		/**
+		 * @brief Informs the connected node about a revocation.
+		 *
+		 * @param self The client's own node details.
+		 * @param peerID The ID of the node being revoked.
+		 * @param revokingNode The ID of the node issuing the revocation.
+		 * @param signature The revokingNode's signed copy of the revocation.
+		 */
+		Expected<MessageT> revoke_peer(const SelfNode& self, std::uint64_t peerID,
+		                               std::uint64_t revokingNode,
+		                               const std::string& signature);
 
 		/**
 		 * @brief Sends a message table to the peer, and receives response.

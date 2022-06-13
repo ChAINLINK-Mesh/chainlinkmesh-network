@@ -79,7 +79,29 @@ namespace PrivateProtocol {
 				continue;
 			}
 
-			inform_node_about_new_peer(neighbour, node);
+			PrivateProtocolClient{ neighbour }.inform_about_new_peer(selfNode, node);
+		}
+	}
+
+	void PrivateProtocolManager::accept_peer_revocation(
+	    const std::uint64_t originator, const std::uint64_t peerID,
+	    const std::uint64_t revokingNode, const std::string& signature) {
+		this->peers->delete_peer(peerID);
+
+		for (const auto& neighbour : peers->get_neighbour_peers(selfNode.id)) {
+			// Don't notify the originator, nor the one doing the revocation, nor the
+			// peer being revoked.
+			if (neighbour.id == originator || neighbour.id == peerID ||
+			    neighbour.id == revokingNode) {
+				continue;
+			}
+
+			if (!neighbour.connectionDetails.has_value()) {
+				continue;
+			}
+
+			PrivateProtocolClient{ neighbour }.revoke_peer(selfNode, peerID,
+			                                               revokingNode, signature);
 		}
 	}
 
@@ -291,14 +313,6 @@ namespace PrivateProtocol {
 		return message;
 	}
 
-	void PrivateProtocolManager::inform_node_about_new_peer(const Node& node,
-	                                                        const Node& newPeer) {
-		// Requires knowing connection details to contact 'node'.
-		assert(node.connectionDetails);
-
-		PrivateProtocolClient{ node }.inform_about_new_peer(selfNode, newPeer);
-	}
-
 	PrivateConnection::PrivateConnection(const Poco::Net::StreamSocket& socket,
 	                                     PrivateProtocolManager& parent)
 	    : Poco::Net::TCPServerConnection{ socket }, parent{ parent } {}
@@ -355,6 +369,9 @@ namespace PrivateProtocol {
 			case Command_PeerRequestCommand:
 				handle_peer_request(packet.value());
 				break;
+			case Command_PeerRevocationCommand:
+				handle_peer_revocation(packet.value());
+				break;
 			case Command_ErrorCommand:
 				// Don't respond to this. Alternative implementations may have a more
 				// advanced error recovery mechanism.
@@ -373,6 +390,18 @@ namespace PrivateProtocol {
 		command.Set(errorCommand);
 
 		// If we fail to sign the error message, don't send it.
+		if (auto message = PrivateProtocolManager::command_to_message(
+		        parent.selfNode, command)) {
+			PrivateProtocolClient::send_message_nowait(socket(), message.value());
+		}
+	}
+
+	void PrivateConnection::send_ack() {
+		AckCommandT ackCommand{};
+		PrivateProtocol::CommandUnion command{};
+		command.Set(ackCommand);
+
+		// If we fail to sign the ack message, don't send it.
 		if (auto message = PrivateProtocolManager::command_to_message(
 		        parent.selfNode, command)) {
 			PrivateProtocolClient::send_message_nowait(socket(), message.value());
@@ -456,8 +485,8 @@ namespace PrivateProtocol {
 			};
 		}
 
-		parent.accept_peer_request(message.originator, node);
-
+		// Send Ack response first, so that the peer can continue sending out its
+		// own messages.
 		AckCommandT ackCommand{};
 		CommandUnion ackCommandUnion{};
 		ackCommandUnion.Set(ackCommand);
@@ -465,12 +494,13 @@ namespace PrivateProtocol {
 		const auto ack = PrivateProtocolManager::command_to_message(
 		    parent.selfNode, ackCommandUnion);
 
-		// Error, but not the responsibility of the sending node, so don't inform.
-		if (!ack.has_value()) {
-			return;
+		// Error to not be able to Ack, but not the responsibility of the sending
+		// node, so don't inform.
+		if (ack.has_value()) {
+			PrivateProtocolClient{ socket() }.send_message_nowait(ack.value());
 		}
 
-		PrivateProtocolClient{ socket() }.send_message_nowait(ack.value());
+		parent.accept_peer_request(message.originator, node);
 	}
 
 	void PrivateConnection::handle_peer_list() {
@@ -524,6 +554,67 @@ namespace PrivateProtocol {
 		}
 
 		PrivateProtocolClient{ socket() }.send_message_nowait(response.value());
+	}
+
+	void PrivateConnection::handle_peer_revocation(
+	    const PrivateProtocol::MessageT& message) {
+		assert(message.command.type == Command_PeerRevocationCommand);
+		const auto* const revocation = message.command.AsPeerRevocationCommand();
+		const auto revokingNode = parent.peers->get_peer(revocation->revoking_node);
+
+		if (!revokingNode.has_value()) {
+			send_error("Unknown revoking node");
+			return;
+		}
+
+		const auto peerIDStr = std::to_string(revocation->peer_id);
+
+		if (const auto signatureMatches =
+		        GenericCertificateManager<char>::check_signature(
+		            revokingNode->controlPlanePublicKey, peerIDStr,
+		            revocation->signature);
+		    !signatureMatches.has_value() || !signatureMatches.value()) {
+			send_error("Revocation attributed to wrong node");
+			return;
+		}
+
+		const auto peerCertChain =
+		    parent.peers->get_certificate_chain(revocation->peer_id);
+
+		// We don't know the node being revoked, but so no action needs to be taken.
+		if (!peerCertChain.has_value()) {
+			send_ack();
+			return;
+		}
+
+		for (const auto& peerCert : peerCertChain.value()) {
+			// Non-owning copy of the subject name.
+			auto* const peerName = X509_get_subject_name(peerCert.get());
+			const auto peerID =
+			    CertificateManager::get_subject_attribute(peerName, NID_serialNumber);
+
+			// If the peerCert doesn't have a single valid ID, ignore it.
+			// Shouldn't ever be in this position, as all certificates should have
+			// already been filtered.
+			if (peerID.size() != 1) {
+				continue;
+			}
+
+			// We only want to compare details of the revoking node.
+			if (peerID[0] != std::to_string(revocation->revoking_node)) {
+				continue;
+			}
+
+			// We have found a node in the ancestry of the revoked node, and their
+			// revocation is cryptographically correct.
+			parent.accept_peer_revocation(message.originator, revocation->peer_id,
+			                              revocation->revoking_node,
+			                              revocation->signature);
+			send_ack();
+			return;
+		}
+
+		send_error("Unable to verify revocation authorisation");
 	}
 
 	PrivateProtocolClient::PrivateProtocolClient(Node peer)
@@ -582,6 +673,28 @@ namespace PrivateProtocol {
 
 		CommandUnion command{};
 		command.Set(request);
+
+		const auto message =
+		    PrivateProtocolManager::command_to_message(self, command);
+
+		if (!message.has_value()) {
+			return std::make_exception_ptr(
+			    std::runtime_error{ "Failed to sign message" });
+		}
+
+		return send_message(message.value());
+	}
+
+	Expected<MessageT> PrivateProtocolClient::revoke_peer(
+	    const SelfNode& self, const std::uint64_t peerID,
+	    const std::uint64_t revokingNode, const std::string& signature) {
+		PeerRevocationCommandT revocation{};
+		revocation.peer_id = peerID;
+		revocation.revoking_node = revokingNode;
+		revocation.signature = signature;
+
+		CommandUnion command{};
+		command.Set(revocation);
 
 		const auto message =
 		    PrivateProtocolManager::command_to_message(self, command);

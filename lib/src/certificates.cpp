@@ -620,8 +620,7 @@ std::optional<X509_RAII> GenericCertificateManager<Encoding>::sign_csr(
 template <std::integral Encoding>
 std::optional<std::vector<Encoding>>
 GenericCertificateManager<Encoding>::sign_data(
-    const EVP_PKEY_RAII& privateKey,
-    const std::span<const std::uint8_t>& data) {
+    const EVP_PKEY_RAII& privateKey, const std::span<const Encoding>& data) {
 	assert(privateKey);
 	assert(!data.empty());
 
@@ -638,7 +637,8 @@ GenericCertificateManager<Encoding>::sign_data(
 
 	size_t sigLen = 0;
 
-	if (EVP_DigestSign(digestCtx.get(), nullptr, &sigLen, data.data(),
+	if (EVP_DigestSign(digestCtx.get(), nullptr, &sigLen,
+	                   reinterpret_cast<const unsigned char*>(data.data()),
 	                   data.size()) != 1) {
 		return std::nullopt;
 	}
@@ -647,9 +647,10 @@ GenericCertificateManager<Encoding>::sign_data(
 
 	std::vector<Encoding> signature(sigLen, 0);
 
-	if (EVP_DigestSign(digestCtx.get(),
-	                   reinterpret_cast<unsigned char*>(signature.data()),
-	                   &sigLen, data.data(), data.size()) != 1) {
+	if (EVP_DigestSign(
+	        digestCtx.get(), reinterpret_cast<unsigned char*>(signature.data()),
+	        &sigLen, reinterpret_cast<const unsigned char*>(data.data()),
+	        data.size()) != 1) {
 		return std::nullopt;
 	}
 
@@ -658,8 +659,8 @@ GenericCertificateManager<Encoding>::sign_data(
 
 template <std::integral Encoding>
 std::optional<bool> GenericCertificateManager<Encoding>::check_signature(
-    const EVP_PKEY_RAII& publicKey, const std::span<const std::uint8_t>& data,
-    const std::span<const std::uint8_t>& signature) {
+    const EVP_PKEY_RAII& publicKey, const std::span<const Encoding>& data,
+    const std::span<const Encoding>& signature) {
 	EVP_MD_CTX_RAII digestCtx{ EVP_MD_CTX_new() };
 
 	if (digestCtx == nullptr) {
@@ -671,9 +672,10 @@ std::optional<bool> GenericCertificateManager<Encoding>::check_signature(
 		return std::nullopt;
 	}
 
-	const auto verifyResult =
-	    EVP_DigestVerify(digestCtx.get(), signature.data(), signature.size(),
-	                     data.data(), data.size());
+	const auto verifyResult = EVP_DigestVerify(
+	    digestCtx.get(), reinterpret_cast<const unsigned char*>(signature.data()),
+	    signature.size(), reinterpret_cast<const unsigned char*>(data.data()),
+	    data.size());
 
 	// A result of less than 0 indicates an error occurred.
 	if (verifyResult < 0) {

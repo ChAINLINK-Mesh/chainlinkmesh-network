@@ -233,7 +233,7 @@ public:
 	 */
 	[[nodiscard]] static std::optional<std::vector<Encoding>>
 	sign_data(const EVP_PKEY_RAII& privateKey,
-	          const std::span<const std::uint8_t>& data);
+	          const std::span<const Encoding>& data);
 
 	/**
 	 * @brief Checks that the given public key signed the data with the signature.
@@ -246,8 +246,8 @@ public:
 	 */
 	[[nodiscard]] static std::optional<bool>
 	check_signature(const EVP_PKEY_RAII& publicKey,
-	                const std::span<const std::uint8_t>& data,
-	                const std::span<const std::uint8_t>& signature);
+	                const std::span<const Encoding>& data,
+	                const std::span<const Encoding>& signature);
 
 	// Enforce 2048-bit RSA keys
 	static const constexpr std::uint32_t KEY_LENGTH = 2048;

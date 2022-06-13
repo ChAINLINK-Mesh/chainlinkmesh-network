@@ -26,6 +26,14 @@ table PeerRequestCommand {
 	peer_id:uint64;
 }
 
+table PeerRevocationCommand {
+	// ID of the node whose access is being revoked.
+	peer_id:uint64;
+	// ID of the node _doing_ the revoking.
+	revoking_node:uint64;
+	signature:string;
+}
+
 table ErrorCommand {
 	error:string;
 }
@@ -38,6 +46,7 @@ union Command {
 	PeerListCommand,
 	PeerListResponseCommand,
 	PeerRequestCommand,
+	PeerRevocationCommand,
 	ErrorCommand,
 	AckCommand,
 }
