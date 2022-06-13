@@ -276,6 +276,7 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 			          wgPublicKey.begin());
 		}
 
+		// Generate RSA key
 		const auto privateKey{ CertificateManager::generate_rsa_key() };
 
 		if (!privateKey) {
@@ -302,14 +303,6 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 		if (config().hasOption("server") || !config().hasOption("client")) {
 			logger().notice("Running in root CA mode");
 
-			// Generate RSA key
-			auto rsaKey = CertificateManager::generate_rsa_key();
-
-			if (!rsaKey) {
-				logger().fatal("Failed to generate server CA key\n");
-				return;
-			}
-
 			id = Node::generate_id();
 
 			if (auto tempCertificate = CertificateManager::generate_certificate(
@@ -327,11 +320,11 @@ void ServerDaemon::initialize(Poco::Util::Application& self) {
 			                "common-name",
 			                std::string{ DEFAULT_CERT_INFO.commonName }),
 			            .userID = userID.value(),
-			            .serialNumber = std::to_string(id.value()),
+			            .serialNumber = id.value(),
 			            .validityDuration = config().getUInt64(
 			                "validity-duration", DEFAULT_CERT_INFO.validityDuration),
 			        },
-			        rsaKey.value())) {
+			        privateKey.value())) {
 				certificate = std::move(tempCertificate.value());
 			} else {
 				logger().fatal("Failed to generate server CA certificate\n");

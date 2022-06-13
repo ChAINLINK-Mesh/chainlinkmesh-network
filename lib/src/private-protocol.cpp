@@ -385,12 +385,12 @@ namespace PrivateProtocol {
 
 		const auto& peerInform = message.command.AsPeerInformCommand();
 
-		auto node =
+		auto optNode =
 		    PrivateProtocolManager::convert_peer_inform_to_node(*peerInform);
 
-		if (std::holds_alternative<std::exception_ptr>(node)) {
+		if (std::holds_alternative<std::exception_ptr>(optNode)) {
 			try {
-				std::rethrow_exception(std::get<std::exception_ptr>(node));
+				std::rethrow_exception(std::get<std::exception_ptr>(optNode));
 			} catch (const std::runtime_error& err) {
 				send_error(err.what());
 			} catch (...) {
@@ -399,7 +399,64 @@ namespace PrivateProtocol {
 			return;
 		}
 
-		parent.accept_peer_request(message.originator, std::get<Node>(node));
+		// Get issuer, and verify that they are the listed parent.
+		const auto& node = std::get<Node>(optNode);
+
+		if (X509_self_signed(node.controlPlaneCertificate.get(), 1) == 1) {
+			throw std::runtime_error{
+				"Peer inform announces self-signed certificate"
+			};
+		}
+
+		const X509_NAME* issuer =
+		    X509_get_issuer_name(node.controlPlaneCertificate.get());
+
+		if (issuer == nullptr) {
+			throw std::runtime_error{ "Couldn't discover peer-inform's issuer" };
+		}
+
+		const auto issuerID =
+		    CertificateManager::get_subject_attribute(issuer, NID_serialNumber);
+
+		if (issuerID.size() != 1) {
+			throw std::runtime_error{ "Failed to get a single issuer node ID" };
+		}
+
+		// Will throw if ID cannot be converted to an integer
+		const auto issuerIDNum = std::stoull(issuerID[0]);
+
+		if (issuerIDNum != node.parent) {
+			throw std::runtime_error{
+				"Peer announcement's parent doesn't match its certificate's issuer"
+			};
+		}
+
+		// const auto issuerCertChain =
+		//     parent.peers->get_certificate_chain(issuerIDNum);
+		const auto knownIssuerDetails = parent.peers->get_peer(issuerIDNum);
+
+		if (!knownIssuerDetails.has_value()) {
+			throw std::runtime_error{ "Issuer is unknown" };
+		}
+
+		const auto knownIssuerPublicKey =
+		    CertificateManager::get_certificate_pubkey(
+		        knownIssuerDetails->controlPlaneCertificate);
+
+		// Expect any certificate decoding to have been validated for existing
+		// peers.
+		assert(knownIssuerPublicKey.has_value());
+
+		if (int issuerCertificateVeracity = X509_verify(
+		        node.controlPlaneCertificate.get(), knownIssuerPublicKey->get());
+		    issuerCertificateVeracity < 1) {
+			throw std::runtime_error{
+				std::string{ "Issuer has different public key to known public key: " } +
+				std::to_string(issuerCertificateVeracity)
+			};
+		}
+
+		parent.accept_peer_request(message.originator, node);
 
 		AckCommandT ackCommand{};
 		CommandUnion ackCommandUnion{};

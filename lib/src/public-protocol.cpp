@@ -42,6 +42,19 @@ PublicProtocolManager::PublicProtocolManager(Configuration config)
 	assert(selfNode.connectionDetails->wireGuardHost);
 	assert(peers);
 
+	// Ensure the certificate specified matches the key
+	assert([&selfNode = this->selfNode]() {
+		const auto certificatePublicKey =
+		    CertificateManager::get_certificate_pubkey(
+		        selfNode.controlPlaneCertificate);
+
+		const auto publicKeyFromPriv =
+		    CertificateManager::get_pubkey(selfNode.controlPlanePrivateKey);
+
+		return *certificatePublicKey->get() == *publicKeyFromPriv->get() &&
+		       *publicKeyFromPriv->get() == *selfNode.controlPlanePublicKey.get();
+	}());
+
 	this->peers->add_peer(selfNode);
 }
 
@@ -683,9 +696,9 @@ InitialisationRespPacket PublicProtocolClient::connect() {
 
 	assert(responseBytes.size() < std::numeric_limits<int>::max());
 
-	if (publicSocket.receiveBytes(responseBytes.data(),
-	                              static_cast<int>(responseBytes.size())) <
-	    PublicProtocol::InitialisationRespPacket::MIN_PACKET_SIZE) {
+	if (int bytes = publicSocket.receiveBytes(
+	        responseBytes.data(), static_cast<int>(responseBytes.size()));
+	    bytes < PublicProtocol::InitialisationRespPacket::MIN_PACKET_SIZE) {
 		throw std::runtime_error{
 			"Failed to receive a valid response from the parent server"
 		};

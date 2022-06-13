@@ -170,12 +170,6 @@ Server::Configuration get_child_config(const TestPorts& testPorts,
 CertificateInfo
 generate_default_certificate_info(std::optional<std::uint64_t> nodeID,
                                   const std::string& userID) {
-	std::optional<std::string> serialNumber{};
-
-	if (nodeID.has_value()) {
-		serialNumber = std::to_string(nodeID.value());
-	}
-
 	return CertificateInfo{
 		.country = "UK",
 		.province = "province",
@@ -183,7 +177,7 @@ generate_default_certificate_info(std::optional<std::uint64_t> nodeID,
 		.organisation = "organisation",
 		.commonName = "common-name",
 		.userID = userID,
-		.serialNumber = serialNumber,
+		.serialNumber = nodeID,
 		.validityDuration = PublicProtocol::PublicProtocolManager::
 		    DEFAULT_CERTIFICATE_VALIDITY_SECONDS,
 	};

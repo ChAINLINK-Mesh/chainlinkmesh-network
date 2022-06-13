@@ -10,6 +10,7 @@
 #include <limits>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 extern "C" {
@@ -74,6 +75,12 @@ GenericCertificateManager<Encoding>::generate_certificate(
 		return std::nullopt;
 	}
 
+	if (X509_set_version(
+	        x509.get(), GenericCertificateManager::DEFAULT_CERTIFICATE_VERSION) !=
+	    1) {
+		return std::nullopt;
+	}
+
 	// Set certificate properties
 	X509_gmtime_adj(X509_getm_notBefore(x509.get()), 0);
 	X509_gmtime_adj(X509_getm_notAfter(x509.get()),
@@ -94,6 +101,41 @@ GenericCertificateManager<Encoding>::generate_certificate(
 	}
 
 	if (X509_set_issuer_name(x509.get(), x509Name) != 1) {
+		return std::nullopt;
+	}
+
+	ASN1_INTEGER_RAII serialNumber{ ASN1_INTEGER_new() };
+
+	if (serialNumber == nullptr) {
+		return std::nullopt;
+	}
+
+	if (ASN1_INTEGER_set_uint64(serialNumber.get(),
+	                            certificateInfo.serialNumber.value()) != 1) {
+		return std::nullopt;
+	}
+
+	if (X509_set_serialNumber(x509.get(), serialNumber.get()) != 1) {
+		return std::nullopt;
+	}
+
+	X509V3_CTX ctx;
+
+	// Set context of v3 extensions without config database.
+	X509V3_set_ctx_nodb(&ctx);
+	// Issuer and subject are the same cert if self-signed.
+	X509V3_set_ctx(&ctx, x509.get(), x509.get(), nullptr, nullptr, 0);
+
+	X509_EXTENSION_RAII ext{ X509V3_EXT_conf_nid(
+		  nullptr, &ctx, NID_basic_constraints, "critical,CA:TRUE") };
+
+	if (ext == nullptr || X509_add_ext(x509.get(), ext.get(), -1) != 1) {
+		return std::nullopt;
+	}
+
+	ext.reset(X509V3_EXT_conf_nid(nullptr, &ctx, NID_key_usage, "keyCertSign"));
+
+	if (ext == nullptr || X509_add_ext(x509.get(), ext.get(), -1) != 1) {
 		return std::nullopt;
 	}
 
@@ -156,6 +198,29 @@ GenericCertificateManager<Encoding>::generate_certificate_request(
 	}
 
 	return x509Req;
+}
+
+template <std::integral Encoding>
+std::optional<EVP_PKEY_RAII> GenericCertificateManager<Encoding>::get_pubkey(
+    const EVP_PKEY_RAII& privateKey) {
+	BIO_RAII bio{ BIO_new(BIO_s_mem()) };
+
+	if (bio == nullptr) {
+		return std::nullopt;
+	}
+
+	if (PEM_write_bio_PUBKEY(bio.get(), privateKey.get()) == 0) {
+		return std::nullopt;
+	}
+
+	EVP_PKEY* pkey = nullptr;
+	PEM_read_bio_PUBKEY(bio.get(), &pkey, nullptr, nullptr);
+
+	if (pkey == nullptr) {
+		return std::nullopt;
+	}
+
+	return EVP_PKEY_RAII{ pkey };
 }
 
 template <std::integral Encoding>
@@ -471,8 +536,8 @@ GenericCertificateManager<Encoding>::encode_pem(const EVP_PKEY_RAII& pkey) {
 
 template <std::integral Encoding>
 std::optional<X509_RAII> GenericCertificateManager<Encoding>::sign_csr(
-    const X509_REQ_RAII& req, const X509_RAII& caCert, const EVP_PKEY_RAII& key,
-    const std::uint64_t validityDurationSeconds) {
+    const X509_REQ_RAII& req, const X509_RAII& caCert,
+    const EVP_PKEY_RAII& caKey, const std::uint64_t validityDurationSeconds) {
 	assert(validityDurationSeconds < std::numeric_limits<long>::max());
 
 	X509_RAII signedReq{ X509_new() };
@@ -512,7 +577,40 @@ std::optional<X509_RAII> GenericCertificateManager<Encoding>::sign_csr(
 
 	X509_set_pubkey(signedReq.get(), reqPubKey.get());
 
-	if (X509_sign(signedReq.get(), key.get(), EVP_sha256()) == 0) {
+	// TODO: This implementation could be relocated to a more suitable method.
+	//       Currently, the expectation of a numeric NID_serialNumber is not made
+	//       clear.
+	const auto serialNumbers = get_subject_attribute(reqSN, NID_serialNumber);
+
+	// We want a single numeric ID
+	if (serialNumbers.size() != 1) {
+		return std::nullopt;
+	}
+
+	std::uint64_t serialNumber = 0;
+	try {
+		serialNumber = std::stoull(serialNumbers[0]);
+	} catch (std::invalid_argument& /* ignored */) {
+		return std::nullopt;
+	} catch (std::out_of_range& /* ignored */) {
+		return std::nullopt;
+	}
+
+	ASN1_INTEGER_RAII asn1SerialNumber{ ASN1_INTEGER_new() };
+
+	if (asn1SerialNumber == nullptr) {
+		return std::nullopt;
+	}
+
+	if (ASN1_INTEGER_set_uint64(asn1SerialNumber.get(), serialNumber) != 1) {
+		return std::nullopt;
+	}
+
+	if (X509_set_serialNumber(signedReq.get(), asn1SerialNumber.get()) != 1) {
+		return std::nullopt;
+	}
+
+	if (X509_sign(signedReq.get(), caKey.get(), EVP_sha256()) == 0) {
 		return std::nullopt;
 	}
 
@@ -594,9 +692,6 @@ bool GenericCertificateManager<Encoding>::x509_set_name_from_certificate_info(
 	assert(certificateInfo.organisation.size() < std::numeric_limits<int>::max());
 	assert(certificateInfo.commonName.size() < std::numeric_limits<int>::max());
 	assert(certificateInfo.userID.size() < std::numeric_limits<int>::max());
-	assert(!certificateInfo.serialNumber.has_value() ||
-	       certificateInfo.serialNumber->size() <
-	           std::numeric_limits<int>::max());
 
 	// TODO: "C" is likely to fail, due to the upper-bounds placed on the data
 	// length. See: https://datatracker.ietf.org/doc/html/rfc5280#appendix-A.1 '--
@@ -648,14 +743,15 @@ bool GenericCertificateManager<Encoding>::x509_set_name_from_certificate_info(
 		return false;
 	}
 
-	if (certificateInfo.serialNumber.has_value() &&
-	    X509_NAME_add_entry_by_NID(
-	        x509Name, NID_serialNumber, MBSTRING_UTF8,
-	        reinterpret_cast<const unsigned char*>(
-	            certificateInfo.serialNumber->data()),
-	        static_cast<int>(certificateInfo.serialNumber->length()), -1,
-	        0) != 1) {
-		return false;
+	if (certificateInfo.serialNumber.has_value()) {
+		const auto serialNumberStr =
+		    std::to_string(certificateInfo.serialNumber.value());
+		if (X509_NAME_add_entry_by_NID(
+		        x509Name, NID_serialNumber, MBSTRING_UTF8,
+		        reinterpret_cast<const unsigned char*>(serialNumberStr.data()),
+		        static_cast<int>(serialNumberStr.length()), -1, 0) != 1) {
+			return false;
+		}
 	}
 
 	return true;
@@ -708,6 +804,36 @@ bool operator==(const X509& a, const X509& b) {
 	}
 
 	if (PEM_write_bio_X509(bio2.get(), &b) == 0) {
+		// Unable to write PEM form, so mark as inequal.
+		return false;
+	}
+
+	char* data1 = nullptr;
+	const auto bio1Size = BIO_get_mem_data(bio1.get(), &data1);
+	char* data2 = nullptr;
+	const auto bio2Size = BIO_get_mem_data(bio2.get(), &data2);
+
+	if (bio1Size != bio2Size) {
+		return false;
+	}
+
+	return memcmp(data1, data2, bio1Size) == 0;
+}
+
+bool operator==(const EVP_PKEY& a, const EVP_PKEY& b) {
+	BIO_RAII bio1{ BIO_new(BIO_s_mem()) };
+	BIO_RAII bio2{ BIO_new(BIO_s_mem()) };
+
+	if (!bio1 || !bio2) {
+		return false;
+	}
+
+	if (PEM_write_bio_PUBKEY(bio1.get(), &a) == 0) {
+		// Unable to write PEM form, so mark as inequal.
+		return false;
+	}
+
+	if (PEM_write_bio_PUBKEY(bio2.get(), &b) == 0) {
 		// Unable to write PEM form, so mark as inequal.
 		return false;
 	}

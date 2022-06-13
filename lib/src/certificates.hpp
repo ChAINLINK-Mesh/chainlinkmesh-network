@@ -23,12 +23,12 @@ struct CertificateInfo {
 	std::string country, province, city, organisation, commonName, userID;
 
 	/**
-	 * @serialNumber The ID of the node, encoded as a UTF-8 string.
+	 * @serialNumber The ID of the node.
 	 *
 	 *               Should be set for Certificates, but not for
 	 *               Certificate-Signing Requests.
 	 */
-	std::optional<std::string> serialNumber;
+	std::optional<std::uint64_t> serialNumber;
 	std::uint64_t validityDuration;
 };
 
@@ -69,6 +69,15 @@ public:
 	[[nodiscard]] static std::optional<X509_REQ_RAII>
 	generate_certificate_request(const CertificateInfo& certificateInfo,
 	                             std::optional<EVP_PKEY_RAII> privateKey);
+
+	/**
+	 * @brief Converts a private key into a public-key-only form.
+	 *
+	 * @param privateKey The private key to convert.
+	 * @return The public key, or std::nullopt if an error occurred.
+	 */
+	[[nodiscard]] static std::optional<EVP_PKEY_RAII>
+	get_pubkey(const EVP_PKEY_RAII& privateKey);
 
 	/**
 	 * @brief Gets a certificate's public key.
@@ -204,8 +213,8 @@ public:
 	 * @brief Signs a CSR with the given certificate and keys.
 	 *
 	 * @param req the X509 CSR request to sign
-	 * @param caCert what X509 certificate to use to sign this
-	 * @param key the X509 certificate private key
+	 * @param caCert the CA X509 certificate to use to sign this
+	 * @param caKey the CA X509 certificate private key
 	 * @param validityDurationSeconds how many seconds the signed certificate
 	 *                                should be valid for
 	 * @return either the signed certificate, or std::nullopt if the certificate
@@ -213,7 +222,7 @@ public:
 	 */
 	[[nodiscard]] static std::optional<X509_RAII>
 	sign_csr(const X509_REQ_RAII& req, const X509_RAII& caCert,
-	         const EVP_PKEY_RAII& key, std::uint64_t validityDurationSeconds);
+	         const EVP_PKEY_RAII& caKey, std::uint64_t validityDurationSeconds);
 
 	/**
 	 * @brief Signs the given data with the private key.
@@ -264,3 +273,4 @@ using CertificateManager = GenericCertificateManager<>;
 
 bool operator==(const X509_REQ& a, const X509_REQ& b);
 bool operator==(const X509& a, const X509& b);
+bool operator==(const EVP_PKEY& a, const EVP_PKEY& b);

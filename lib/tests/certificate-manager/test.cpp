@@ -59,7 +59,7 @@ void generate_certificate() {
 		.organisation = "Imperial College London",
 		.commonName = "imperial.ac.uk",
 		.userID = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
-		.serialNumber = "123456789",
+		.serialNumber = 123456789,
 		.validityDuration = 900,
 	};
 
@@ -76,7 +76,7 @@ void generate_certificate() {
 		.organisation = "",
 		.commonName = "",
 		.userID = "",
-		.serialNumber = "",
+		.serialNumber = 123456789,
 		.validityDuration = 900,
 	};
 
@@ -90,6 +90,19 @@ void generate_certificate() {
 
 	if (!validCertificate) {
 		throw "Failed to create certificate from valid details.";
+	}
+
+	const auto certificatePubKey =
+	    CertificateManager::get_certificate_pubkey(validCertificate.value());
+	const auto privateKeyPubkey = CertificateManager::get_pubkey(key);
+
+	using CCert = GenericCertificateManager<char>;
+	std::cerr << "Certificate:\n"
+	          << CCert::encode_pem(validCertificate.value()) << "\n";
+	std::cerr << "Private key:\n" << CCert::encode_pem(key) << "\n";
+
+	if (*certificatePubKey->get() != *privateKeyPubkey->get()) {
+		throw "Failed to generate certificate with the correct key";
 	}
 }
 
@@ -123,7 +136,7 @@ void equality_certificate() {
 	        .organisation = "Mozilla",
 	        .commonName = "www.mozilla.org",
 	        .userID = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
-	        .serialNumber = "123456789",
+	        .serialNumber = 123456789,
 	        .validityDuration = 60ULL * 60ULL * 24ULL * 365ULL * 10ULL,
 	    },
 	    key);
@@ -140,7 +153,7 @@ void equality_certificate() {
 	        .organisation = "Test",
 	        .commonName = "test.co.uk",
 	        .userID = "XJMrXJMrXJMrXJMrXJMrXJMrXJMrXJMrXJMrXJMrXJU=",
-	        .serialNumber = "123456789",
+	        .serialNumber = 123456789,
 	        .validityDuration = 60ULL * 60ULL * 24ULL * 365ULL * 10ULL,
 	    },
 	    key);

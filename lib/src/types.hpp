@@ -113,6 +113,12 @@ using X509_RAII = CopyableUniquePtr<X509, FunctionDeleter<X509_free>,
 using X509_REQ_RAII = std::unique_ptr<X509_REQ, FunctionDeleter<X509_REQ_free>>;
 using X509_NAME_RAII =
     std::unique_ptr<X509_NAME, FunctionDeleter<X509_NAME_free>>;
+using X509_STORE_RAII =
+    std::unique_ptr<X509_STORE, FunctionDeleter<X509_STORE_free>>;
+using ASN1_INTEGER_RAII =
+    std::unique_ptr<ASN1_INTEGER, FunctionDeleter<ASN1_INTEGER_free>>;
+using X509_EXTENSION_RAII =
+    std::unique_ptr<X509_EXTENSION, FunctionDeleter<X509_EXTENSION_free>>;
 
 template <typename Type>
 using OPENSSL_RAII = std::unique_ptr<Type, OpenSSLDeleter<Type>>;
