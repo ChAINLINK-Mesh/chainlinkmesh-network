@@ -76,7 +76,10 @@ function test_server() {
 	local instance_id=$(get_next_instance_id)
 	local config_file="${TEST_DATA_DIR}/${TEST_INSTANCE_PREFIX}${instance_id}"
 	local hostname="${1:-"127.0.0.1"}"
-	shift
+
+	if [ $# -ge 1 ]; then
+		shift 1
+	fi
 
 	touch "${config_file}"
 
