@@ -242,7 +242,7 @@ Server::Configuration get_config(const std::uint64_t id,
 		.parent = std::nullopt,
 		.controlPlanePrivateKey = privateKey.value(),
 		.meshPublicKey = wgPublicKey,
-		.meshPrivateKey = {},
+		.meshPrivateKey = wgPrivateKey,
 		.wireGuardAddress = testPorts.wireGuardAddress,
 		.publicProtoAddress = testPorts.publicProtoAddress,
 		.privateProtoPort = testPorts.privateProtoAddress.port(),
@@ -282,9 +282,12 @@ generate_default_certificate(const std::string& userID,
 EVP_PKEY_RAII pubkey_from_private_key(const EVP_PKEY_RAII& privateKey) {
 	BIO_RAII bio{ BIO_new(BIO_s_mem()) };
 	assert(bio);
-	assert(PEM_write_bio_PUBKEY(bio.get(), privateKey.get()) != 0);
+	const auto bioWriteRes = PEM_write_bio_PUBKEY(bio.get(), privateKey.get());
+	assert(bioWriteRes != 0);
 	EVP_PKEY* pubkey{};
-	assert(PEM_read_bio_PUBKEY(bio.get(), &pubkey, nullptr, nullptr) != nullptr);
+	auto* const bioReadRes =
+	    PEM_read_bio_PUBKEY(bio.get(), &pubkey, nullptr, nullptr);
+	assert(bioReadRes != nullptr);
 
 	return pubkey;
 }
@@ -293,6 +296,7 @@ Node get_random_peer(std::optional<std::uint64_t> parentID) {
 	const auto peerConfig = get_config(rand(), get_test_ports());
 	const EVP_PKEY_RAII peerControlPlanePubkey =
 	    pubkey_from_private_key(peerConfig.controlPlanePrivateKey);
+	assert(peerControlPlanePubkey != nullptr);
 
 	return Node{
 		.id = peerConfig.id.value(),

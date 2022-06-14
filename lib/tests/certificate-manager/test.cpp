@@ -96,11 +96,6 @@ void generate_certificate() {
 	    CertificateManager::get_certificate_pubkey(validCertificate.value());
 	const auto privateKeyPubkey = CertificateManager::get_pubkey(key);
 
-	using CCert = GenericCertificateManager<char>;
-	std::cerr << "Certificate:\n"
-	          << CCert::encode_pem(validCertificate.value()) << "\n";
-	std::cerr << "Private key:\n" << CCert::encode_pem(key) << "\n";
-
 	if (*certificatePubKey->get() != *privateKeyPubkey->get()) {
 		throw "Failed to generate certificate with the correct key";
 	}

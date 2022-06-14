@@ -33,3 +33,7 @@ Poco::Net::IPAddress Node::get_control_plane_ip(const std::uint64_t nodeID) {
 	// address of local variable.
 	return Poco::Net::IPAddress{ &addr, sizeof(addr) };
 }
+
+bool Node::is_valid() const {
+	return controlPlanePublicKey != nullptr && controlPlaneCertificate != nullptr;
+}

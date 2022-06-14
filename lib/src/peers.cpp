@@ -17,6 +17,8 @@ Peers::Peers(Peers&& other) noexcept
 
 Peers::Peers(const std::vector<Node>& nodes) {
 	for (const auto& node : nodes) {
+		assert(node.is_valid());
+
 		[[maybe_unused]] auto [_, inserted] =
 		    this->nodes.insert(std::make_pair(node.id, node));
 

@@ -88,7 +88,7 @@ Server::Configuration get_config(const std::uint64_t id,
 		.parent = std::nullopt,
 		.controlPlanePrivateKey = privateKey.value(),
 		.meshPublicKey = wgPublicKey,
-		.meshPrivateKey = {},
+		.meshPrivateKey = wgPrivateKey,
 		.wireGuardAddress = testPorts.wireGuardAddress,
 		.publicProtoAddress = testPorts.publicProtoAddress,
 		.privateProtoPort = testPorts.privateProtoAddress.port(),
@@ -137,22 +137,36 @@ Server::Configuration get_child_config(const TestPorts& testPorts,
 	};
 	const auto response = client.connect();
 
+	if (response.certificateChain.size() != 2) {
+		throw std::runtime_error{
+			"Certificate chain doesn't include parent and child certificates"
+		};
+	}
+
+	const auto& parentCert = response.certificateChain[0];
+	const auto& childCert = response.certificateChain[1];
+	const auto parentPublicKey =
+	    CertificateManager::get_certificate_pubkey(parentCert);
+
+	// We're not testing the certificate manager here.
+	assert(parentPublicKey.has_value());
+
 	return Server::Configuration{
 		.id = response.allocatedNode,
 		.parent = std::nullopt,
 		.controlPlanePrivateKey = privateKey.value(),
 		.meshPublicKey = wgPublicKey,
-		.meshPrivateKey = {},
+		.meshPrivateKey = wgPrivateKey,
 		.wireGuardAddress = testPorts.wireGuardAddress,
 		.publicProtoAddress = testPorts.publicProtoAddress,
 		.privateProtoPort = testPorts.privateProtoAddress.port(),
-		.controlPlaneCertificate = response.certificateChain.back(),
+		.controlPlaneCertificate = childCert,
 		.psk = std::nullopt,
 		.pskTTL = 100,
 		.clock = std::make_shared<TestClock>(std::chrono::seconds{ 123456789 }),
 		.peers = { Node{
 		    .id = response.respondingNode,
-		    .controlPlanePublicKey = {},
+		    .controlPlanePublicKey = parentPublicKey.value(),
 		    .wireGuardPublicKey = response.respondingWireGuardPublicKey,
 		    .controlPlaneIP = response.respondingControlPlaneIPAddress,
 		    .connectionDetails =
@@ -160,7 +174,7 @@ Server::Configuration get_child_config(const TestPorts& testPorts,
 		            .controlPlanePort = response.respondingControlPlanePort,
 		            .wireGuardHost = client.get_parent_address(response),
 		        },
-		    .controlPlaneCertificate = {},
+		    .controlPlaneCertificate = parentCert,
 		    .parent = std::nullopt,
 		} },
 		.randomEngine = std::nullopt,

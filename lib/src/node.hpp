@@ -40,6 +40,8 @@ struct Node {
 	 */
 	[[nodiscard]] static Poco::Net::IPAddress
 	get_control_plane_ip(std::uint64_t nodeID);
+
+	bool is_valid() const;
 };
 
 struct SelfNode : public Node {
