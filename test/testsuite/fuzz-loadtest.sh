@@ -31,16 +31,11 @@ function run_client() {
 		exit 2
 	fi
 
+	local server_mac="$(arping -f "${server_ip}" | awk '/reply from/ { gsub(/[\[\]]/, "", $5); print $5 }')"
+
 	date --iso-8601=seconds
 
-	for i in {1..10000}; do
-		resp="$(head -c 1400 /dev/urandom | nc "${server_ip}" "${server_port}")"
-
-		if [ ! -z "${resp}" ]; then
-			printf "Failed test, got response\n"
-			exit 3
-		fi
-	done
+	trafgen --no-sock-mem -o eth0 "{ eth(da=${server_mac}), ipv4(da=${server_ip}), tcp(sport=${server_port}, dport=${server_port}), drnd(1400) }" -b 10GB 2>&1
 
 	date --iso-8601=seconds
 

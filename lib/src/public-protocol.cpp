@@ -727,9 +727,10 @@ InitialisationRespPacket PublicProtocolClient::connect() {
 Host PublicProtocolClient::get_parent_address(
     const InitialisationRespPacket& response) const {
 	if (config.parentAddress) {
-		return config.parentAddress;
+		return Host{ static_cast<Poco::Net::IPAddress>(config.parentAddress),
+			           response.respondingWireGuardPort };
 	}
 
 	return Host{ response.respondingWireGuardIPAddress,
-		           response.respondingControlPlanePort };
+		           response.respondingWireGuardPort };
 }

@@ -31,25 +31,47 @@ function run_client() {
 		exit 2
 	fi
 
-	date --iso-8601=seconds
+	(
+		test_server "${instance_ip}" "${@}" &
+		local client_pid=$!
 
-	for i in {1..10000}; do
-		resp="$(head -c 1400 /dev/urandom | nc "${server_ip}" "${server_port}")"
+		function cleanup_client() {
+			err=$?
+			trap - SIGINT EXIT
+			kill -INT "${client_pid}"
+			return ${err}
+		}
 
-		if [ ! -z "${resp}" ]; then
-			printf "Failed test, got response\n"
-			exit 3
-		fi
-	done
+		trap "cleanup_client" SIGINT EXIT
 
-	date --iso-8601=seconds
+		sleep 5
+		local server_wireguard_address="$(wg show all allowed-ips | grep '^chainlink' | head -n 1 | awk '{ sub(/\/[[:digit:]]+$/, "", $3); print $3 }')"
+
+		iperf3 -c "${server_wireguard_address}" --time 60 >&2
+	)
 
 	exit $?
 }
 
 function run_server() {
 	local instance_ip="${1}"
-	test_server "${instance_ip}"
+
+	(
+		test_server "${instance_ip}" &
+		local server_pid=$!
+
+		function cleanup_server() {
+			err=$?
+			trap - SIGINT EXIT
+			kill -INT "${server_pid}"
+			return ${err}
+		}
+
+		trap "cleanup_server" SIGINT EXIT
+
+		iperf3 -s --one-off >&2
+	)
+
 	exit $?
 }
 

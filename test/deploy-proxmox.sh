@@ -97,12 +97,12 @@ function run_client_server() {
 
 			trap "cleanup_client" SIGINT EXIT
 
-			printf "Client:\n"
-			run_on_container "${client_id}" service_output follow "${client_service}" | indent >&2
+			printf "Client (%s):\n" "${client_service}"
+			run_on_container "${client_id}" service_output follow "${client_service}" | (trap '' INT; indent >&2)
 		)
 
-		printf "Server:\n" >&2
-		run_on_container "${server_id}" service_output "${server_service}" | indent >&2
+		# printf "Server:\n" >&2
+		# run_on_container "${server_id}" service_output "${server_service}" | indent >&2
 	)
 
 	return ${server_result}

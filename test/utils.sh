@@ -15,9 +15,13 @@ function service_running() {
 function service_output() {
 	if [ "${1}" = "follow" ]; then
 		shift
-		journalctl --no-tail --follow -o cat _SYSTEMD_UNIT="${1}"
+		journalctl --no-tail --all --follow -o cat _SYSTEMD_UNIT="${1}"
+	elif [ "${1}" = "since" ]; then
+		local since="${2}"
+		shift 2
+		journalctl --no-tail --all --since="${since}" -o cat _SYSTEMD_UNIT="${1}"
 	else
-		journalctl --no-tail -o cat _SYSTEMD_UNIT="${1}"
+		journalctl --no-tail --all -o cat _SYSTEMD_UNIT="${1}"
 	fi
 }
 
@@ -81,9 +85,9 @@ function run_test() {
 		local ip="$(ip route get 1 | awk -F ' src ' '{ print $2 }' | awk '{ print $1 }')"
 
 		if [ -z "${1}" ]; then
-			"${testfile}" -s "${ip}"
+			stdbuf -o0 "${testfile}" -s "${ip}"
 		else
-			"${testfile}" -c "${ip}" -- "${@}"
+			stdbuf -o0 "${testfile}" -c "${ip}" -- "${@}"
 		fi
 	)
 }
