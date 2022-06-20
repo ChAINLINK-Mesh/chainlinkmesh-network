@@ -72,16 +72,10 @@ function priv-net-run() {
 	fi
 }
 
-function test_server() {
-	local instance_id=$(get_next_instance_id)
-	local config_file="${TEST_DATA_DIR}/${TEST_INSTANCE_PREFIX}${instance_id}"
-	local hostname="${1:-"127.0.0.1"}"
-
-	if [ $# -ge 1 ]; then
-		shift 1
-	fi
-
-	touch "${config_file}"
+function _run_test_server() {
+	local config_file="${1}"
+	local hostname="${2}"
+	local instance_id="${3}"
 
 	(
 		# Remove instance config on exit
@@ -99,8 +93,22 @@ function test_server() {
 			"--config=${config_file}" \
 			"--public-address=${hostname}:$(get_instance_public_port ${instance_id})" \
 			"--wireguard-address=${hostname}:$(get_instance_wireguard_port ${instance_id})" \
-			"--private-port=$(get_instance_private_port ${instance_id})" "$@"
+			"--private-port=$(get_instance_private_port ${instance_id})" "${@}"
 	)
+}
+
+function test_server() {
+	local instance_id=$(get_next_instance_id)
+	local config_file="${TEST_DATA_DIR}/${TEST_INSTANCE_PREFIX}${instance_id}"
+	local hostname="${1:-"127.0.0.1"}"
+
+	if [ $# -ge 1 ]; then
+		shift 1
+	fi
+
+	touch "${config_file}"
+
+	_run_test_server "${config_file}" "${hostname}" "${instance_id}" "${@}"
 
 	return $err
 }

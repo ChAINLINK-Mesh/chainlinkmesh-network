@@ -33,7 +33,7 @@ function run_client() {
 
 	date --iso-8601=seconds
 
-	for i in {1..10000}; do
+	for i in $(seq 1 10000); do
 		resp="$(head -c 1400 /dev/urandom | nc "${server_ip}" "${server_port}")"
 
 		if [ ! -z "${resp}" ]; then

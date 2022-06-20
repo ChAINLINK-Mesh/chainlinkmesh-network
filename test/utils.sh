@@ -29,7 +29,7 @@ function indent() {
 	local indent_amount="${1:-1}"
 	local indent=""
 
-	for i in {1..${indent_amount}}; do
+	for i in $(seq 1 ${indent_amount}); do
 		indent="$(printf "%s\t" "${indent}")"
 	done
 
