@@ -44,7 +44,7 @@ void decode_packet() {
 	message.signature = { randByte(), randByte(), randByte(), randByte() };
 
 	flatbuffers::FlatBufferBuilder fbb{};
-	fbb.Finish(PrivateProtocol::Message::Pack(fbb, &message));
+	fbb.FinishSizePrefixed(PrivateProtocol::Message::Pack(fbb, &message));
 
 	const auto fbbBytes = fbb.GetBufferSpan();
 	const auto decodedPacket =

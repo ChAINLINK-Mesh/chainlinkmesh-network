@@ -697,7 +697,7 @@ InitialisationRespPacket PublicProtocolClient::connect() {
 	ByteString responseBytes(
 	    PublicProtocol::InitialisationRespPacket::MAX_PACKET_SIZE, '\0');
 
-	size_t totalResponseBytes = 0;
+	std::uint16_t totalResponseBytes = 0;
 
 	publicSocket.setReceiveTimeout(InitialisationRespPacket::RECEIVE_TIMEOUT);
 

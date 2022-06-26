@@ -134,8 +134,8 @@ void Server::start() {
 		const auto res = PrivateProtocol::PrivateProtocolClient{ parent.value() }
 		                     .inform_about_new_peer(self, ourPeerDetails);
 
-		if (std::holds_alternative<std::exception_ptr>(res)) {
-			std::rethrow_exception(std::get<std::exception_ptr>(res));
+		if (!successful(res)) {
+			std::rethrow_exception(get_error(res));
 		}
 
 		const auto resMsg = std::get<PrivateProtocol::MessageT>(res);

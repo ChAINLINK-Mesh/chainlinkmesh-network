@@ -20,6 +20,7 @@ set(HEADER_FILES
 set(SOURCE_FILES
     certificates.cpp
     clock.cpp
+    error.cpp
     literals.cpp
     node.cpp
     peers.cpp

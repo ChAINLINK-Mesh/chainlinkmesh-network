@@ -23,9 +23,8 @@ successful(const std::variant<SuccessType, std::exception_ptr>& x) {
 	return std::holds_alternative<SuccessType>(x);
 }
 
-template <typename SuccessType>
-constexpr bool successful(const std::optional<SuccessType>& x) {
-	return x.has_value();
+constexpr bool successful(const std::optional<std::exception_ptr>& x) {
+	return !x.has_value();
 }
 
 template <typename SuccessType>
@@ -35,20 +34,26 @@ get_expected(const std::variant<SuccessType, std::exception_ptr>& x) {
 }
 
 template <typename SuccessType>
-constexpr SuccessType get_expected(const std::optional<SuccessType>& x) {
-	return x.value();
-}
-
-template <typename SuccessType>
 constexpr SuccessType&
 get_expected(std::variant<SuccessType, std::exception_ptr>& x) {
 	return std::get<SuccessType>(x);
 }
 
 template <typename SuccessType>
-constexpr SuccessType& get_expected(std::optional<SuccessType>& x) {
-	return x.value();
+std::exception_ptr
+get_error(const std::variant<SuccessType, std::exception_ptr>& x) {
+	return std::get<std::exception_ptr>(x);
 }
+
+std::exception_ptr get_error(const std::optional<std::exception_ptr>& x);
+
+template <typename SuccessType>
+std::exception_ptr&
+get_error(std::variant<SuccessType, std::exception_ptr>& x) {
+	return std::get<std::exception_ptr>(x);
+}
+
+std::exception_ptr& get_error(std::optional<std::exception_ptr>& x);
 
 template <class... Types>
 struct Overload : Types... {

@@ -16,6 +16,9 @@ namespace PrivateProtocol {
 	const constexpr std::uint16_t DEFAULT_CONTROL_PLANE_PORT = 273;
 	const constexpr std::uint32_t MAX_PACKET_SIZE = 32 * 1024;
 
+	// 10 seconds
+	const Poco::Timespan RECEIVE_TIMEOUT{ 10, 0 };
+
 	class PrivateConnection;
 
 	class PrivateProtocolManager {
@@ -194,7 +197,8 @@ namespace PrivateProtocol {
 		/**
 		 * @brief Creates a client which handles a connection to a peer.
 		 *
-		 *        Requires the peer's connection details to be known.
+		 *        Assumes a default control-plane port if connection details are not
+		 *        known.
 		 *
 		 * @param peer The peer to connect to.
 		 */

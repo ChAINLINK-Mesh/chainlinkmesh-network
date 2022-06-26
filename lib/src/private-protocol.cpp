@@ -1,6 +1,7 @@
 #include "private-protocol.hpp"
 #include "certificates.hpp"
 #include "private-protocol_generated.h"
+#include "types.hpp"
 #include "utilities.hpp"
 #include "wireguard.hpp"
 
@@ -33,12 +34,12 @@ namespace PrivateProtocol {
 	std::optional<MessageT> PrivateProtocolManager::decode_packet(
 	    const std::span<const std::uint8_t>& bytes) {
 		flatbuffers::Verifier verifier{ bytes.data(), bytes.size() };
-		if (!VerifyMessageBuffer(verifier)) {
+		if (!VerifySizePrefixedMessageBuffer(verifier)) {
 			return std::nullopt;
 		}
 
 		MessageT message{};
-		GetMessage(bytes.data())->UnPackTo(&message);
+		GetSizePrefixedMessage(bytes.data())->UnPackTo(&message);
 
 		return message;
 	}
@@ -73,13 +74,29 @@ namespace PrivateProtocol {
 				continue;
 			}
 
-			// If we have a node's cryptographic details but not their connection
-			// details, then don't send to them.
-			if (!neighbour.connectionDetails.has_value()) {
-				continue;
-			}
+			// Continue even if we have a node's cryptographic details but not their
+			// connection details, since they may have already connected to us
+			// (knowing our details)
 
-			PrivateProtocolClient{ neighbour }.inform_about_new_peer(selfNode, node);
+			const auto result =
+			    PrivateProtocolClient{ neighbour }.inform_about_new_peer(selfNode,
+			                                                             node);
+
+			if (!successful(result)) {
+				try {
+					throw get_error(result);
+				} catch (std::exception& err) {
+					std::cerr << "Error when informing neighbour about new peer: "
+					          << err.what() << "\n";
+				} catch (...) {
+					std::cerr
+					    << "Unknown error when informing neighbour about new peer.\n";
+				}
+			} else if (const auto response = get_expected(result);
+			           response.command.type == Command_ErrorCommand) {
+				std::cerr << "Neighbour reported error after informing about new peer: "
+				          << response.command.AsErrorCommand()->error << "\n";
+			}
 		}
 	}
 
@@ -159,6 +176,11 @@ namespace PrivateProtocol {
 
 			const auto peerInformResp = std::get<MessageT>(peerInformExpected);
 
+			if (peerInformResp.command.type == Command_ErrorCommand) {
+				return std::make_exception_ptr(std::runtime_error{
+				    "Received error response when requesting specific peer: " +
+				    peerInformResp.command.AsErrorCommand()->error });
+			}
 			if (peerInformResp.command.type != Command_PeerInformCommand) {
 				return std::make_exception_ptr(std::runtime_error{
 				    "Received error response when requesting specific peer" });
@@ -293,7 +315,7 @@ namespace PrivateProtocol {
 	PrivateProtocolManager::command_to_message(const SelfNode& self,
 	                                           const CommandUnion& command) {
 		flatbuffers::FlatBufferBuilder fbb{};
-		fbb.Finish(command.Pack(fbb));
+		fbb.FinishSizePrefixed(command.Pack(fbb));
 		const auto fbbBuffer = fbb.GetBufferSpan();
 
 		const auto signature = CertificateManager::sign_data(
@@ -318,11 +340,49 @@ namespace PrivateProtocol {
 	    : Poco::Net::TCPServerConnection{ socket }, parent{ parent } {}
 
 	void PrivateConnection::run() {
-		Poco::Buffer<char> buf{ MAX_PACKET_SIZE };
-		const auto bytes = socket().receiveBytes(buf);
-		const std::span<const std::uint8_t> bufData{
-			reinterpret_cast<const std::uint8_t*>(buf.begin()), buf.size()
-		};
+		static_assert(MAX_PACKET_SIZE <= std::numeric_limits<int>::max());
+
+		ByteString responseBytes(MAX_PACKET_SIZE, '\0');
+		auto bytesReceived = socket().receiveBytes(
+		    responseBytes.data(), static_cast<int>(responseBytes.size()));
+		// Flatbuffers uses first 4 bytes for the size prefix.
+		// If we don't even receive that much, then reject.
+		if (bytesReceived < static_cast<int>(sizeof(flatbuffers::uoffset_t))) {
+			send_error("Packet too small");
+			return;
+		}
+
+		const auto expectedSize =
+		    flatbuffers::GetPrefixedSize(responseBytes.data()) +
+		    sizeof(flatbuffers::uoffset_t);
+
+		if (expectedSize > MAX_PACKET_SIZE) {
+			send_error("Message too large");
+			return;
+		}
+
+		if (bytesReceived < static_cast<int>(expectedSize)) {
+			socket().setReceiveTimeout(RECEIVE_TIMEOUT);
+		}
+
+		std::uint16_t totalResponseBytes = bytesReceived;
+
+		// While we have more bytes to wait for.
+		while (expectedSize > totalResponseBytes) {
+			try {
+				bytesReceived = socket().receiveBytes(
+				    responseBytes.data() + totalResponseBytes,
+				    static_cast<int>(responseBytes.size() - totalResponseBytes));
+			} catch (Poco::TimeoutException& /* ignored */) {
+				send_error("Transmit rate too slow");
+				return;
+			}
+
+			totalResponseBytes += bytesReceived;
+		}
+
+		std::span<const std::uint8_t> bufData{ responseBytes.data(),
+			                                     totalResponseBytes };
 
 		const auto packet = PrivateProtocolManager::decode_packet(bufData);
 
@@ -339,7 +399,7 @@ namespace PrivateProtocol {
 		}
 
 		flatbuffers::FlatBufferBuilder fbb{};
-		fbb.Finish(packet->command.Pack(fbb));
+		fbb.FinishSizePrefixed(packet->command.Pack(fbb));
 		const auto fbbBuffer = fbb.GetBufferSpan();
 
 		const auto signatureMatches = CertificateManager::check_signature(
@@ -349,6 +409,7 @@ namespace PrivateProtocol {
 
 		if (!signatureMatches.has_value() || !signatureMatches.value()) {
 			send_error("Could not confirm signature");
+			return;
 		}
 
 		switch (packet->command.type) {
@@ -429,7 +490,7 @@ namespace PrivateProtocol {
 		}
 
 		// Get issuer, and verify that they are the listed parent.
-		const auto& node = std::get<Node>(optNode);
+		auto& node = std::get<Node>(optNode);
 
 		if (X509_self_signed(node.controlPlaneCertificate.get(), 1) == 1) {
 			throw std::runtime_error{
@@ -621,10 +682,10 @@ namespace PrivateProtocol {
 	    : socket{ OptionallyOwned<Poco::Net::StreamSocket>::make(
 		        Poco::Net::SocketAddress{
 		            peer.controlPlaneIP,
-		            peer.connectionDetails->controlPlanePort,
-		        }) } {
-		assert(peer.connectionDetails);
-	}
+		            peer.connectionDetails.has_value()
+		                ? peer.connectionDetails->controlPlanePort
+		                : PrivateProtocol::DEFAULT_CONTROL_PLANE_PORT,
+		        }) } {}
 
 	PrivateProtocolClient::PrivateProtocolClient(Poco::Net::StreamSocket& socket)
 	    : socket{ socket } {}
@@ -714,19 +775,55 @@ namespace PrivateProtocol {
 
 	Expected<void>
 	PrivateProtocolClient::send_message_nowait(const MessageT& message) {
-		send_message_nowait(socket, message);
-		return std::nullopt;
+		return send_message_nowait(socket, message);
 	}
 
 	Expected<MessageT>
 	PrivateProtocolClient::send_message(Poco::Net::StreamSocket& socket,
 	                                    const MessageT& message) {
+		const auto sendResult = send_message_nowait(socket, message);
+
+		if (!successful(sendResult)) {
+			return get_error(sendResult);
+		}
+
 		try {
-			send_message_nowait(socket, message);
-			Poco::FIFOBuffer buffer{ MAX_PACKET_SIZE };
-			int bytesReceived = socket.receiveBytes(buffer);
+			socket.setReceiveTimeout(RECEIVE_TIMEOUT);
+			ByteString responseBytes(MAX_PACKET_SIZE, '\0');
+			int bytesReceived = 0;
+
+			bytesReceived = socket.receiveBytes(
+			    responseBytes.data(), static_cast<int>(responseBytes.size()));
+
+			// Flatbuffers uses first 4 bytes for the size prefix.
+			// If we don't even receive that much, then reject.
+			if (bytesReceived < static_cast<int>(sizeof(flatbuffers::uoffset_t))) {
+				return std::make_exception_ptr(
+				    std::runtime_error{ "Response packet too small" });
+			}
+
+			const auto expectedSize =
+			    flatbuffers::GetPrefixedSize(responseBytes.data()) +
+			    sizeof(flatbuffers::uoffset_t);
+
+			if (expectedSize > MAX_PACKET_SIZE) {
+				return std::make_exception_ptr(
+				    std::runtime_error{ "Response message too large" });
+			}
+
+			while (bytesReceived < static_cast<int>(expectedSize)) {
+				try {
+					bytesReceived += socket.receiveBytes(
+					    responseBytes.data() + bytesReceived,
+					    static_cast<int>(responseBytes.size() - bytesReceived));
+				} catch (Poco::TimeoutException& /* ignored */) {
+					return std::make_exception_ptr(std::runtime_error{
+					    "Timeout when waiting for response message" });
+				}
+			}
+
 			const std::span<const std::uint8_t> bufData{
-				reinterpret_cast<const std::uint8_t*>(buffer.begin()),
+				reinterpret_cast<const std::uint8_t*>(responseBytes.data()),
 				static_cast<std::size_t>(bytesReceived)
 			};
 
@@ -747,7 +844,7 @@ namespace PrivateProtocol {
 	PrivateProtocolClient::send_message_nowait(Poco::Net::StreamSocket& socket,
 	                                           const MessageT& message) {
 		flatbuffers::FlatBufferBuilder fbb{};
-		fbb.Finish(Message::Pack(fbb, &message));
+		fbb.FinishSizePrefixed(Message::Pack(fbb, &message));
 
 		const auto fbbBuffer = fbb.GetBufferSpan();
 		assert(fbbBuffer.size_bytes() < std::numeric_limits<int>::max());
