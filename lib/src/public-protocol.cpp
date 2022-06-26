@@ -32,6 +32,9 @@ extern "C" {
 
 using namespace PublicProtocol;
 
+// 5 seconds
+const Poco::Timespan InitialisationRespPacket::RECEIVE_TIMEOUT{ 5, 0 };
+
 PublicProtocolManager::PublicProtocolManager(Configuration config)
     : selfNode{ std::move(config.self) }, clock{ config.clock },
       idDistribution{ Node::generate_id_range() },
@@ -504,7 +507,7 @@ ByteString InitialisationRespPacket::get_bytes() const {
 	    this->respondingWireGuardPublicKey, this->respondingControlPlaneIPAddress,
 	    this->respondingWireGuardIPAddress, this->respondingControlPlanePort,
 	    this->respondingWireGuardPort,
-	    CertificateManager::encode_pem(this->certificateChain));
+	    CertificateManager::encode_pem(this->certificateChain), '\0');
 }
 
 std::optional<InitialisationRespPacket>
@@ -694,14 +697,39 @@ InitialisationRespPacket PublicProtocolClient::connect() {
 	ByteString responseBytes(
 	    PublicProtocol::InitialisationRespPacket::MAX_PACKET_SIZE, '\0');
 
-	assert(responseBytes.size() < std::numeric_limits<int>::max());
+	size_t totalResponseBytes = 0;
 
-	if (int bytes = publicSocket.receiveBytes(
-	        responseBytes.data(), static_cast<int>(responseBytes.size()));
-	    bytes < PublicProtocol::InitialisationRespPacket::MIN_PACKET_SIZE) {
-		throw std::runtime_error{
-			"Failed to receive a valid response from the parent server"
-		};
+	publicSocket.setReceiveTimeout(InitialisationRespPacket::RECEIVE_TIMEOUT);
+
+	while (totalResponseBytes <
+	       PublicProtocol::InitialisationRespPacket::MAX_PACKET_SIZE) {
+		assert(responseBytes.size() < std::numeric_limits<int>::max());
+
+		int responseByteCount;
+		try {
+			responseByteCount = publicSocket.receiveBytes(
+			    responseBytes.data() + totalResponseBytes,
+			    static_cast<int>(responseBytes.size() - totalResponseBytes));
+		} catch (Poco::TimeoutException& /* ignored */) {
+			throw std::runtime_error{ "Server didn't respond in time" };
+		}
+
+		if (responseByteCount <
+		    PublicProtocol::InitialisationRespPacket::MIN_PACKET_SIZE) {
+			throw std::runtime_error{
+				"Failed to receive a valid response from the parent server"
+			};
+		}
+
+		totalResponseBytes += responseByteCount;
+
+		// If the last byte received was a null character, and beyond all of the
+		// binary fields, then assume the end of the certificate chain.
+		if (responseByteCount >
+		        PublicProtocol::InitialisationRespPacket::MIN_PACKET_SIZE &&
+		    responseBytes[totalResponseBytes - 1] == '\0') {
+			break;
+		}
 	}
 
 	auto response =

@@ -85,6 +85,7 @@ namespace PublicProtocol {
 		// Packet is only limited by packet size, given that the responding
 		// certificate chain may have multiple entries.
 		const constexpr static std::uint16_t MAX_PACKET_SIZE = 65535;
+		const static Poco::Timespan RECEIVE_TIMEOUT;
 	};
 
 	class PublicConnection;
